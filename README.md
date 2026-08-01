@@ -86,6 +86,10 @@ npm run dev    # watch build
 npm run build  # type-check + production build
 ```
 
+## Support
+
+If you enjoy Stereo, you can [buy me a coffee](https://buymeacoffee.com/romanmurray).
+
 ## License
 
 [GPL-3.0](LICENSE)

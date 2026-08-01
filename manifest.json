@@ -6,5 +6,6 @@
 	"description": "Stream music from your Navidrome or Subsonic-compatible server with a sidebar player, library browser, and queue.",
 	"author": "Roman Murray",
 	"authorUrl": "https://github.com/romanmurray",
+	"fundingUrl": "https://buymeacoffee.com/romanmurray",
 	"isDesktopOnly": true
 }
