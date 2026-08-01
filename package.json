@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-stereo",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Stream music from your Navidrome or Subsonic-compatible server inside Obsidian.",
 	"main": "main.js",
 	"scripts": {

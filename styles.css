@@ -35,8 +35,10 @@
 		calc(var(--size-4-3) + var(--stereo-status-bar-clearance, 0px));
 }
 
-.stereo-hidden {
-	display: none !important;
+/* Tripled so the utility out-ranks any two-class display rule (e.g. the
+   viz-mode art swaps) from any position, without !important. */
+.stereo-hidden.stereo-hidden.stereo-hidden {
+	display: none;
 }
 
 /* Settings tab */

@@ -223,7 +223,7 @@ export class ConfirmModal extends Modal {
 			.addButton((button) =>
 				button
 					.setButtonText(this.confirmLabel)
-					.setWarning()
+					.setDestructive()
 					.onClick(() => {
 						this.close();
 						this.onConfirm();
