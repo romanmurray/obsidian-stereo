@@ -1,0 +1,1095 @@
+/* Stereo — all classes prefixed `stereo-`; colors via Obsidian CSS variables. */
+
+/* Buttons are flat glyphs, not raised cards — they all carry Obsidian's
+   native `clickable-icon` class, which themes style consistently. These rules
+   only add what that treatment lacks. */
+.stereo-button:disabled {
+	color: var(--text-faint);
+	cursor: default;
+	background: transparent;
+}
+
+/* Text-bearing flat buttons (Save, Clear, Play, Load more) — accent text
+   signals clickability without any card chrome. */
+.stereo-text-button {
+	color: var(--interactive-accent);
+	font-size: var(--font-ui-small);
+}
+
+.stereo-text-button:hover {
+	color: var(--interactive-accent);
+	text-decoration: underline;
+}
+
+/* Extra bottom padding keeps the player controls clear of Obsidian's status
+   bar, which floats over the bottom edge of the pane. */
+/* The full selector is needed to out-rank the app's own
+   `.workspace-leaf-content .view-content` padding rule. */
+.workspace-leaf-content .view-content.stereo-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	/* Bottom padding grows by however much of the pane the floating status
+	   bar covers (measured by the view), keeping the controls clear of it. */
+	padding: var(--size-4-2) var(--size-4-3)
+		calc(var(--size-4-3) + var(--stereo-status-bar-clearance, 0px));
+}
+
+.stereo-hidden {
+	display: none !important;
+}
+
+/* Settings tab */
+
+/* Pill tab bar: quiet resting state, filled active pill. */
+.stereo-settings-tabs {
+	display: flex;
+	gap: var(--size-2-2);
+	margin-bottom: var(--size-4-4);
+	flex-wrap: wrap;
+}
+
+.stereo-settings-tab {
+	padding: var(--size-2-3) var(--size-4-4);
+	border-radius: var(--radius-l);
+	border: 1px solid var(--background-modifier-border);
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.stereo-settings-tab:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.stereo-settings-tab-active,
+.stereo-settings-tab-active:hover {
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	font-weight: var(--font-semibold);
+}
+
+/* Connection status: colored dot + live message + retest, under the fields. */
+.stereo-conn-status {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-2);
+	padding: var(--size-2-3) var(--size-4-2);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.stereo-conn-dot {
+	width: 9px;
+	height: 9px;
+	flex: none;
+	border-radius: 50%;
+	background: var(--text-faint);
+}
+
+.stereo-conn-status[data-state="ok"] .stereo-conn-dot {
+	background: var(--color-green);
+}
+
+.stereo-conn-status[data-state="error"] .stereo-conn-dot {
+	background: var(--color-red);
+}
+
+.stereo-conn-status[data-state="testing"] .stereo-conn-dot {
+	width: auto;
+	height: auto;
+	background: none;
+	display: flex;
+}
+
+.stereo-conn-status[data-state="testing"] .stereo-conn-dot svg {
+	width: 12px;
+	height: 12px;
+	animation: stereo-spin 1s linear infinite;
+}
+
+@keyframes stereo-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.stereo-conn-text {
+	flex: 1;
+	min-width: 0;
+}
+
+.stereo-conn-retest {
+	flex: none;
+	font-size: var(--font-ui-small);
+}
+
+/* Segmented control: connected buttons, every choice visible. */
+.stereo-segmented {
+	display: flex;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	overflow: hidden;
+}
+
+.stereo-segmented-option {
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	color: var(--text-muted);
+	padding: var(--size-2-2) var(--size-4-2);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.stereo-segmented-option + .stereo-segmented-option {
+	border-left: 1px solid var(--background-modifier-border);
+}
+
+.stereo-segmented-option:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.stereo-segmented-active,
+.stereo-segmented-active:hover {
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+	font-weight: var(--font-semibold);
+}
+
+/* Stepper: −/+ around a number field, for values where the number matters. */
+.stereo-stepper {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-1);
+}
+
+.stereo-stepper-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--input-height);
+	height: var(--input-height);
+	padding: 0;
+	border-radius: var(--radius-m);
+	box-shadow: none;
+}
+
+.stereo-stepper-button svg {
+	width: 14px;
+	height: 14px;
+}
+
+.stereo-stepper-button:disabled {
+	color: var(--text-faint);
+	cursor: default;
+}
+
+.stereo-stepper-input {
+	width: 5ch;
+	text-align: center;
+	-moz-appearance: textfield;
+	appearance: textfield;
+}
+
+.stereo-stepper-input::-webkit-outer-spin-button,
+.stereo-stepper-input::-webkit-inner-spin-button {
+	appearance: none;
+	margin: 0;
+}
+
+/* Lyrics preview: renders the font settings live, like the real panel. */
+.stereo-lyrics-preview {
+	margin-top: var(--size-4-2);
+	padding: var(--size-4-3);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	text-align: center;
+	line-height: 1.6;
+}
+
+.stereo-lyrics-preview-active {
+	color: var(--text-normal);
+	font-weight: var(--font-semibold);
+}
+
+.stereo-settings-section {
+	padding: var(--size-4-2) 0 var(--size-4-4);
+}
+
+.stereo-settings-section + .stereo-settings-section {
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Obsidian gives headings a top border by default — the section divider
+   replaces it, and the first section sits directly under the tab bar. */
+.stereo-settings .setting-item-heading {
+	border-top: none;
+	padding-top: 0;
+}
+
+/* Search */
+
+.stereo-search-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	margin-bottom: var(--size-4-2);
+}
+
+.stereo-search-icon {
+	display: flex;
+	color: var(--text-muted);
+}
+
+.stereo-search-input {
+	flex: 1;
+	/* Flex items refuse to shrink below their intrinsic width by default,
+	   which forces a horizontal scrollbar in narrow panes. */
+	min-width: 0;
+}
+
+/* Tabs */
+
+.stereo-tabs {
+	display: flex;
+	gap: var(--size-4-2);
+	margin-bottom: var(--size-4-2);
+}
+
+.stereo-tab {
+	flex: 1;
+	justify-content: center;
+	font-size: var(--font-ui-medium);
+	/* In very narrow panes the labels clip rather than force a scrollbar. */
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.stereo-tab-active,
+.stereo-tab-active:hover {
+	color: var(--interactive-accent);
+	font-weight: var(--font-semibold);
+}
+
+/* Pages */
+
+.stereo-pages {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.stereo-page {
+	display: none;
+	flex-direction: column;
+	gap: var(--size-4-2);
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.stereo-page-active {
+	display: flex;
+}
+
+/* Now Playing scrolls as a whole; other pages scroll their inner list only. */
+.stereo-page-scroll {
+	overflow-y: auto;
+}
+
+/* Full ↔ mini player transition. Pure entrance animations: CSS animations
+   restart whenever an element returns from display: none, so no JS sequencing
+   is needed. Opening Now Playing grows the full player up from the bottom
+   (where the mini bar sits); leaving it fades the new page in while the mini
+   bar slides up — the player reads as collapsing into the bar. */
+.stereo-page-active {
+	animation: stereo-page-in 180ms ease-out;
+}
+
+.stereo-page-scroll.stereo-page-active {
+	animation: stereo-player-in 240ms ease-out;
+	transform-origin: 50% 100%;
+}
+
+@keyframes stereo-page-in {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes stereo-player-in {
+	from {
+		opacity: 0;
+		transform: translateY(16px) scale(0.97);
+	}
+}
+
+/* Album art */
+
+.stereo-art-wrap {
+	display: flex;
+	/* Grow into all the leftover vertical space and center the (square) art in
+	   it, so surplus height splits above and below the art instead of dumping
+	   into one gap between the art and the controls. */
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+	padding: var(--size-4-2);
+}
+
+.stereo-art {
+	/* --stereo-art-size is measured by the view: the height left over after
+	   the fixed rows, so a shorter pane shrinks the art instead of scrolling. */
+	width: min(92%, var(--stereo-art-size, 340px));
+	aspect-ratio: 1;
+	object-fit: cover;
+	border-radius: 50%;
+	box-shadow: var(--shadow-s);
+}
+
+.stereo-art-spinning {
+	animation: stereo-spin 24s linear infinite;
+}
+
+@keyframes stereo-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Lyrics panel — stands in for the art area, sized by the same variable. */
+
+.stereo-lyrics-wrap {
+	display: flex;
+	/* Fill the available height rather than the square-art size — lyrics benefit
+	   from vertical space even when the art (a square) is width-limited. */
+	flex: 1;
+	min-height: 120px;
+	padding: var(--size-4-2);
+}
+
+.stereo-lyrics {
+	flex: 1;
+	min-width: 0;
+	overflow-y: auto;
+	font-size: var(--stereo-lyrics-size, 16px);
+	font-family: var(--stereo-lyrics-font, inherit);
+	line-height: 1.5;
+	padding: 0 var(--size-4-3);
+	text-align: var(--stereo-lyrics-align, left);
+}
+
+/* Breathing room so the first and last synced lines can still center. */
+.stereo-lyrics-synced::before,
+.stereo-lyrics-synced::after {
+	content: "";
+	display: block;
+	height: 40%;
+}
+
+.stereo-lyrics-line {
+	padding: 0.2em 0;
+	color: var(--text-muted);
+	white-space: pre-wrap;
+	transition: color 150ms ease;
+}
+
+.stereo-lyrics-synced .stereo-lyrics-line {
+	cursor: pointer;
+}
+
+.stereo-lyrics-synced .stereo-lyrics-line:hover {
+	color: var(--text-normal);
+}
+
+.stereo-lyrics-line-active {
+	color: var(--text-normal);
+	font-weight: var(--font-semibold);
+}
+
+.stereo-lyrics-empty {
+	color: var(--text-muted);
+	text-align: center;
+	padding-top: var(--size-4-8);
+}
+
+/* Section headings on the Favorites page */
+.stereo-section-heading {
+	font-size: var(--font-smaller);
+	font-weight: var(--font-semibold);
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	margin: var(--size-4-3) 0 var(--size-4-1);
+	/* Subtle hairline between sections — organization without boxes. */
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: var(--size-4-3);
+}
+
+/* The first section sits right under the back row; no line needed there. */
+.stereo-back-row + .stereo-section-heading {
+	border-top: none;
+	padding-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.stereo-art-spinning,
+	.stereo-page-active,
+	.stereo-mini {
+		animation: none;
+	}
+	.stereo-lyrics {
+		scroll-behavior: auto;
+	}
+}
+
+.stereo-art-placeholder {
+	width: min(92%, var(--stereo-art-size, 340px));
+	aspect-ratio: 1;
+	border-radius: 50%;
+	background: var(--background-secondary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-faint);
+}
+
+.stereo-art-placeholder svg {
+	width: 40%;
+	height: 40%;
+}
+
+/* "Album art" view — square cover, no rotation. */
+.stereo-art-square {
+	border-radius: var(--radius-m);
+	animation: none;
+}
+
+/* Visualizer views replace the art in the same area. The canvas's CSS color
+   carries the accent for the renderer to read. */
+.stereo-viz {
+	display: none;
+	/* Same scalable box as the album art, so image-based views (radio tower,
+	   boom box) and the audio views all fill one square that tracks the pane. */
+	width: min(92%, var(--stereo-art-size, 340px));
+	aspect-ratio: 1;
+	color: var(--interactive-accent);
+}
+
+.stereo-art-wrap-viz .stereo-art,
+.stereo-art-wrap-viz .stereo-art-placeholder {
+	display: none;
+}
+
+.stereo-art-wrap-viz .stereo-viz {
+	display: block;
+}
+
+/* Track info — the three lines sit in one tight block (title / artist /
+   album), not spread apart by the page gap, so the art gets the room. */
+
+.stereo-track-info {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-2-1);
+	/* The art wrap (flex: 1) absorbs the surplus and pushes the control cluster
+	   to the bottom, so the title/artist/album block sits statically on top of
+	   the seek bar regardless of Now Playing view or widget size. */
+}
+
+.stereo-track-title {
+	font-weight: var(--font-bold);
+	font-size: var(--font-ui-large);
+	color: var(--text-normal);
+	text-align: center;
+	line-height: var(--line-height-tight);
+}
+
+.stereo-track-artist,
+.stereo-track-album {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	text-align: center;
+	line-height: var(--line-height-tight);
+	min-height: 1em;
+}
+
+.stereo-link {
+	cursor: pointer;
+}
+
+.stereo-link:hover {
+	color: var(--text-normal);
+	text-decoration: underline;
+}
+
+/* Seek — margin-top:auto pushes the whole control block toward the bottom of
+   the Now Playing page, so it sits where the mini player lives on the other
+   screens (the big player "shrinks down" into the mini bar). */
+.stereo-seek-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+}
+
+.stereo-seek {
+	flex: 1;
+	min-width: 0; /* let the slider shrink instead of overflowing the row */
+}
+
+.stereo-time {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: nowrap;
+	min-width: 2.8em;
+	text-align: center;
+}
+
+/* Transport — flat glyphs, sized like a real player's controls. */
+
+.stereo-transport-row {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	/* Generous spacing normally; the gaps give way in very narrow panes. */
+	gap: min(var(--size-4-5), 6%);
+}
+
+.stereo-transport-row .stereo-button svg {
+	width: 22px;
+	height: 22px;
+}
+
+.stereo-play-button {
+	color: var(--text-normal);
+}
+
+.stereo-transport-row .stereo-play-button svg {
+	width: 34px;
+	height: 34px;
+}
+
+/* Volume */
+
+.stereo-volume-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+}
+
+.stereo-volume-icon {
+	display: flex;
+	color: var(--text-muted);
+}
+
+.stereo-volume {
+	flex: 1;
+	min-width: 0; /* let the slider shrink instead of overflowing the row */
+}
+
+/* Extras */
+
+.stereo-extras-row {
+	display: flex;
+	justify-content: center;
+	gap: var(--size-4-2);
+}
+
+.stereo-button-active {
+	color: var(--interactive-accent);
+}
+
+
+/* Errors */
+
+.stereo-error {
+	display: none;
+	font-size: var(--font-ui-small);
+	color: var(--text-error);
+	text-align: center;
+}
+
+.stereo-error-visible {
+	display: block;
+}
+
+/* Queue page */
+
+.stereo-queue-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: var(--size-4-2);
+}
+
+.stereo-queue-actions {
+	display: flex;
+	gap: var(--size-2-2);
+}
+
+.stereo-queue-title {
+	font-weight: var(--font-semibold);
+	color: var(--text-normal);
+	/* Station names can be long — give way to the action buttons. */
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.stereo-queue-actions {
+	flex-shrink: 0;
+}
+
+.stereo-queue-list {
+	flex: 1;
+	overflow-y: auto;
+	min-height: 0;
+}
+
+.stereo-queue-empty {
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+}
+
+.stereo-queue-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-2-2) var(--size-2-2);
+	border-radius: var(--radius-s);
+}
+
+.stereo-queue-row:hover {
+	background: var(--background-modifier-hover);
+}
+
+/* The current track is marked by accent text alone — no card treatment. */
+.stereo-queue-row-current .stereo-queue-row-title {
+	color: var(--interactive-accent);
+	font-weight: var(--font-semibold);
+}
+
+/* Queue position (1, 2, 3…) — quiet, right-aligned so double digits line up. */
+.stereo-queue-row-number {
+	min-width: 1.6em;
+	text-align: right;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+.stereo-queue-row-remove {
+	padding: var(--size-2-1);
+	color: var(--text-faint);
+	opacity: 0;
+	box-shadow: none;
+	background: transparent;
+}
+
+.stereo-queue-row:hover .stereo-queue-row-remove {
+	opacity: 1;
+}
+
+.stereo-queue-row-remove:hover {
+	color: var(--text-normal);
+}
+
+.stereo-queue-row-remove svg {
+	width: 14px;
+	height: 14px;
+}
+
+.stereo-queue-row-meta {
+	flex: 1;
+	min-width: 0;
+	cursor: pointer;
+}
+
+.stereo-queue-row-title {
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.stereo-queue-row-artist {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Library — sub-tabs */
+
+.stereo-subtabs {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-2);
+	flex-wrap: wrap;
+}
+
+.stereo-subtab {
+	font-size: var(--font-ui-small);
+}
+
+.stereo-subtab-active,
+.stereo-subtab-active:hover {
+	color: var(--interactive-accent);
+	font-weight: var(--font-semibold);
+}
+
+.stereo-subtab-refresh {
+	margin-left: auto;
+}
+
+.stereo-library-body {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.stereo-library-content {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+/* Leave room for the alphabet rail so rows don't sit under it. The rail
+   replaces the native scrollbar on this list — otherwise the two overlap and
+   a click on a letter also jumps the scrollbar to a slightly different spot. */
+.stereo-has-scrub {
+	padding-right: var(--size-4-4);
+	scrollbar-width: none;
+}
+
+.stereo-has-scrub::-webkit-scrollbar {
+	display: none;
+}
+
+/* Alphabet scrub rail (artists list) */
+
+.stereo-scrub {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	padding: var(--size-2-2) var(--size-2-1);
+	cursor: pointer;
+	user-select: none;
+	touch-action: none;
+}
+
+.stereo-scrub-letter {
+	font-size: 9px;
+	line-height: 1.25;
+	color: var(--text-muted);
+	transition: transform 80ms ease-out;
+}
+
+.stereo-scrub-letter-active {
+	color: var(--interactive-accent);
+	font-weight: var(--font-bold);
+	transform: scale(1.5);
+}
+
+.stereo-library-status {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	text-align: center;
+	padding: var(--size-4-4);
+}
+
+/* Library — back row & detail headers */
+
+.stereo-back-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-2-2) 0;
+}
+
+.stereo-back-title {
+	font-weight: var(--font-semibold);
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.stereo-detail-header {
+	display: flex;
+	gap: var(--size-4-3);
+	align-items: flex-start;
+	padding: var(--size-2-2) 0 var(--size-4-2);
+}
+
+.stereo-detail-cover {
+	width: 96px;
+	aspect-ratio: 1;
+	object-fit: cover;
+	border-radius: var(--radius-m);
+	flex-shrink: 0;
+}
+
+.stereo-detail-text {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-2-1);
+}
+
+.stereo-detail-title {
+	font-weight: var(--font-bold);
+	color: var(--text-normal);
+}
+
+.stereo-detail-meta {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.stereo-detail-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-3);
+	padding-top: var(--size-2-2);
+}
+
+/* Library — album grid */
+
+.stereo-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--size-4-3) var(--size-4-2);
+	padding: var(--size-2-2) 0;
+}
+
+.stereo-card {
+	cursor: pointer;
+	min-width: 0;
+}
+
+.stereo-card-cover {
+	width: 100%;
+	aspect-ratio: 1;
+	object-fit: cover;
+	border-radius: var(--radius-m);
+	display: block;
+}
+
+.stereo-card-cover-empty {
+	background: var(--background-secondary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-faint);
+}
+
+.stereo-card-title {
+	margin-top: var(--size-2-2);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.stereo-card-artist {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.stereo-more-row {
+	display: flex;
+	justify-content: center;
+	padding: var(--size-4-2) 0 var(--size-4-4);
+}
+
+/* Library — list rows (artists, playlists, radio, tracks) */
+
+.stereo-index-letter {
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	color: var(--text-accent);
+	padding: var(--size-4-2) var(--size-2-2) var(--size-2-1);
+}
+
+.stereo-list-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-2-2);
+	border-radius: var(--radius-s);
+	cursor: pointer;
+}
+
+.stereo-list-row:hover {
+	background: var(--background-modifier-hover);
+}
+
+.stereo-list-row-icon {
+	display: flex;
+	color: var(--text-muted);
+}
+
+.stereo-list-row-number {
+	min-width: 1.6em;
+	text-align: right;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.stereo-list-row-meta {
+	flex: 1;
+	min-width: 0;
+}
+
+.stereo-list-row-title {
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.stereo-list-row-sub {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.stereo-list-row-duration {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+.stereo-track-list {
+	display: flex;
+	flex-direction: column;
+}
+
+/* Search results */
+
+.stereo-search-results {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+}
+
+.stereo-list-row-thumb {
+	width: 32px;
+	height: 32px;
+	object-fit: cover;
+	border-radius: var(--radius-s);
+	flex-shrink: 0;
+}
+
+.stereo-list-row-thumb-empty {
+	background: var(--background-secondary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-faint);
+}
+
+.stereo-list-row-thumb-empty svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* Mini player (bottom bar on every screen except Now Playing) */
+
+.stereo-mini {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: var(--size-4-2);
+	margin-top: var(--size-4-2);
+	animation: stereo-mini-in 240ms ease-out;
+}
+
+@keyframes stereo-mini-in {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+}
+
+.stereo-mini-thumb {
+	flex-shrink: 0;
+	width: 36px;
+	height: 36px;
+}
+
+.stereo-mini-cover {
+	width: 36px;
+	height: 36px;
+	object-fit: cover;
+	border-radius: var(--radius-s);
+}
+
+.stereo-mini-cover-empty {
+	background: var(--background-secondary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-faint);
+}
+
+.stereo-mini-cover-empty svg {
+	width: 18px;
+	height: 18px;
+}
+
+.stereo-mini-meta {
+	flex: 1;
+	min-width: 0;
+	cursor: pointer;
+}
+
+.stereo-mini-title {
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.stereo-mini-artist {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
