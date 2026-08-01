@@ -308,7 +308,7 @@ export class LibraryPane {
 				cls: "stereo-button stereo-text-button clickable-icon",
 				text: "Load more",
 			});
-			moreButton.addEventListener("click", async () => {
+			const loadMore = async (): Promise<void> => {
 				moreButton.disabled = true;
 				const token = this.loadToken;
 				try {
@@ -326,6 +326,9 @@ export class LibraryPane {
 					moreButton.disabled = false;
 					new Notice("Could not load more albums.");
 				}
+			};
+			moreButton.addEventListener("click", () => {
+				void loadMore();
 			});
 		}
 	}
@@ -626,13 +629,14 @@ export class LibraryPane {
 			);
 		};
 		sync();
-		button.addEventListener("click", async () => {
-			try {
-				await toggle();
-			} catch {
-				new Notice("Could not update favorites on the server.");
-			}
-			sync();
+		button.addEventListener("click", () => {
+			void toggle()
+				.catch(() => {
+					new Notice("Could not update favorites on the server.");
+				})
+				.finally(() => {
+					sync();
+				});
 		});
 	}
 

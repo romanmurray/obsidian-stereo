@@ -256,12 +256,12 @@ export class Visualizer {
 	}
 
 	stop(): void {
-		if (this.raf !== 0) cancelAnimationFrame(this.raf);
+		if (this.raf !== 0) window.cancelAnimationFrame(this.raf);
 		this.raf = 0;
 	}
 
 	private tick = (): void => {
-		this.raf = requestAnimationFrame(this.tick);
+		this.raf = window.requestAnimationFrame(this.tick);
 		this.draw();
 	};
 
@@ -525,7 +525,7 @@ export class Visualizer {
 
 		// base illustration, contain-fit, centred, tinted to the theme text colour
 		if (this.towerReady && this.tower) {
-			this.towerCanvas ??= document.createElement("canvas");
+			this.towerCanvas ??= createEl("canvas");
 			this.drawTintedContain(
 				ctx,
 				this.tower,
@@ -649,7 +649,7 @@ export class Visualizer {
 		height: number,
 		dpr: number
 	): void {
-		this.boomboxCanvas ??= document.createElement("canvas");
+		this.boomboxCanvas ??= createEl("canvas");
 		this.drawBoomboxLike(
 			ctx,
 			width,
@@ -671,7 +671,7 @@ export class Visualizer {
 		height: number,
 		dpr: number
 	): void {
-		this.stereoCanvas ??= document.createElement("canvas");
+		this.stereoCanvas ??= createEl("canvas");
 		this.drawBoomboxLike(
 			ctx,
 			width,

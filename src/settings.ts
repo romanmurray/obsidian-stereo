@@ -1,4 +1,10 @@
-import { App, PluginSettingTab, Setting, setIcon } from "obsidian";
+import {
+	App,
+	PluginSettingTab,
+	Setting,
+	setIcon,
+	type SettingDefinitionItem,
+} from "obsidian";
 import type StereoPlugin from "./main";
 import { SubsonicError } from "./subsonic";
 
@@ -106,15 +112,6 @@ export const DEFAULT_SETTINGS: StereoSettings = {
 	searchSongCount: 10,
 };
 
-const SETTINGS_TABS = [
-	{ id: "connection", label: "Connection" },
-	{ id: "playback", label: "Playback" },
-	{ id: "appearance", label: "Appearance" },
-	{ id: "search", label: "Search" },
-] as const;
-
-type SettingsTabId = (typeof SETTINGS_TABS)[number]["id"];
-
 /** Search delay presets — users think in feel, not milliseconds. */
 const SEARCH_SPEEDS: ReadonlyArray<{ ms: number; label: string }> = [
 	{ ms: 100, label: "Instant" },
@@ -138,54 +135,242 @@ const FONT_SUGGESTIONS = [
 
 type ConnectionState = "untested" | "testing" | "ok" | "error";
 
+/** Native-control keys whose change must repaint open Now Playing views. */
+const VIEW_REFRESH_KEYS = new Set<string>([
+	"nowPlayingView",
+	"radioVisualization",
+	"lyricsAutoSize",
+	"lyricsAlign",
+]);
+
 export class StereoSettingTab extends PluginSettingTab {
 	plugin: StereoPlugin;
-	private activeTab: SettingsTabId = "connection";
 
 	private connectionState: ConnectionState = "untested";
 	private connectionMessage = "Not tested yet.";
 	private statusEl: HTMLElement | null = null;
 	private autoTestTimer: number | null = null;
+	/** Set while the lyrics preview row is mounted; restyles it in place. */
+	private applyLyricsPreview: (() => void) | null = null;
 
 	constructor(app: App, plugin: StereoPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+		this.icon = "boom-box";
+		this.containerEl.addClass("stereo-settings");
 	}
 
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-		containerEl.addClass("stereo-settings");
-		this.statusEl = null;
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [
+			{
+				type: "group",
+				heading: "Server",
+				items: [
+					{
+						name: "Server URL",
+						desc: "Address of your Navidrome or Subsonic-compatible server.",
+						control: {
+							type: "text",
+							key: "serverUrl",
+							placeholder: "https://music.example.com",
+						},
+					},
+					{
+						name: "Username",
+						desc: "The account used to sign in.",
+						control: { type: "text", key: "username" },
+					},
+					{
+						name: "Password",
+						desc: "Stored in plain text in this plugin's data file inside your vault.",
+						render: (setting) => this.renderPassword(setting),
+					},
+					{
+						name: "Connection status",
+						searchable: false,
+						render: (setting) => this.renderStatus(setting),
+					},
+				],
+			},
+			{
+				type: "group",
+				heading: "Library",
+				items: [
+					{
+						name: "Track click action",
+						desc: "What clicking a track does. Right-click always offers every action.",
+						render: (setting) =>
+							this.segmented(
+								setting,
+								[
+									{ value: "play", label: "Play" },
+									{ value: "addToQueue", label: "Queue" },
+									{ value: "none", label: "Nothing" },
+								],
+								() => this.plugin.settings.trackClickAction,
+								async (value) => {
+									this.plugin.settings.trackClickAction = value;
+									await this.plugin.saveSettings();
+								}
+							),
+					},
+				],
+			},
+			{
+				type: "group",
+				heading: "Playback",
+				items: [
+					{
+						name: "Scrobble plays",
+						desc: "Report finished plays to the server so play counts and history stay accurate.",
+						control: { type: "toggle", key: "scrobbleEnabled" },
+					},
+					{
+						name: "Station batch size",
+						desc: "Tracks added per station batch, including each More press.",
+						render: (setting) =>
+							this.stepper(
+								setting,
+								{ min: 10, max: 50, step: 5 },
+								() => this.plugin.settings.stationBatchSize,
+								async (value) => {
+									this.plugin.settings.stationBatchSize = value;
+									await this.plugin.saveSettings();
+								}
+							),
+					},
+				],
+			},
+			{
+				type: "group",
+				heading: "Now playing",
+				items: [
+					{
+						name: "Now playing view",
+						desc: "How the current track is presented on the Now Playing screen.",
+						control: {
+							type: "dropdown",
+							key: "nowPlayingView",
+							options: Object.fromEntries(
+								NOW_PLAYING_VIEWS.map((opt) => [opt.value, opt.label])
+							),
+						},
+					},
+					{
+						name: "Internet-radio visualization",
+						desc: "What a radio stream shows instead of your chosen view. Radio has no album art and its audio can't be visualized, so the radio tower is the natural fit; the portable radio just idles.",
+						control: {
+							type: "dropdown",
+							key: "radioVisualization",
+							options: Object.fromEntries(
+								RADIO_VISUALIZATIONS.map((opt) => [opt.value, opt.label])
+							),
+						},
+					},
+				],
+			},
+			{
+				type: "group",
+				heading: "Lyrics",
+				items: [
+					{
+						name: "Look up lyrics online",
+						desc: "When your server has no lyrics for a track, ask the free LRCLIB database. Only the track's title, artist, album, and length are sent.",
+						control: { type: "toggle", key: "lyricsOnlineLookup" },
+					},
+					{
+						name: "Auto-adjust size",
+						desc: "Scale the lyrics text with the panel size, the way the album art fills its space. When off, the fixed size below is used.",
+						control: { type: "toggle", key: "lyricsAutoSize" },
+					},
+					{
+						name: "Font size",
+						desc: "Size of the lyrics text, in pixels. Used when auto-adjust is off.",
+						render: (setting) =>
+							this.stepper(
+								setting,
+								{ min: 12, max: 28, step: 1 },
+								() => this.plugin.settings.lyricsFontSize,
+								async (value) => {
+									this.plugin.settings.lyricsFontSize = value;
+									await this.plugin.saveSettings();
+									this.plugin.refreshNowPlayingViews();
+									this.applyLyricsPreview?.();
+								}
+							),
+					},
+					{
+						name: "Font",
+						desc: "Font family for the lyrics. Leave empty to use the theme font.",
+						render: (setting) => this.renderFontField(setting),
+					},
+					{
+						name: "Alignment",
+						desc: "How the lyrics text is aligned in the panel.",
+						control: {
+							type: "dropdown",
+							key: "lyricsAlign",
+							options: { left: "Left", center: "Centered", right: "Right" },
+						},
+					},
+					{
+						name: "",
+						searchable: false,
+						render: (setting) => this.renderLyricsPreview(setting),
+					},
+				],
+			},
+			{
+				type: "group",
+				heading: "Search",
+				items: [
+					{
+						name: "Search speed",
+						desc: "How quickly results appear after you stop typing.",
+						control: {
+							type: "dropdown",
+							key: "searchDebounceMs",
+							options: Object.fromEntries(
+								SEARCH_SPEEDS.map(({ ms, label }) => [String(ms), label])
+							),
+						},
+					},
+					{
+						name: "Artists",
+						desc: "Search results shown for this group.",
+						render: (setting) => this.countStepper(setting, "searchArtistCount"),
+					},
+					{
+						name: "Albums",
+						desc: "Search results shown for this group.",
+						render: (setting) => this.countStepper(setting, "searchAlbumCount"),
+					},
+					{
+						name: "Tracks",
+						desc: "Search results shown for this group.",
+						render: (setting) => this.countStepper(setting, "searchSongCount"),
+					},
+				],
+			},
+		];
+	}
 
-		const tabBar = containerEl.createDiv({ cls: "stereo-settings-tabs" });
-		for (const { id, label } of SETTINGS_TABS) {
-			const button = tabBar.createEl("button", {
-				cls: "stereo-settings-tab",
-				text: label,
-			});
-			button.toggleClass("stereo-settings-tab-active", id === this.activeTab);
-			button.addEventListener("click", () => {
-				this.activeTab = id;
-				this.display();
-			});
+	getControlValue(key: string): unknown {
+		// The speed dropdown deals in preset strings; the stored value is ms.
+		if (key === "searchDebounceMs") {
+			return String(nearestSearchSpeed(this.plugin.settings.searchDebounceMs));
 		}
+		return (this.plugin.settings as unknown as Record<string, unknown>)[key];
+	}
 
-		const page = containerEl.createDiv({ cls: "stereo-settings-page" });
-		switch (this.activeTab) {
-			case "connection":
-				this.displayConnection(page);
-				break;
-			case "playback":
-				this.displayPlayback(page);
-				break;
-			case "appearance":
-				this.displayAppearance(page);
-				break;
-			case "search":
-				this.displaySearch(page);
-				break;
-		}
+	async setControlValue(key: string, value: unknown): Promise<void> {
+		if (key === "serverUrl" || key === "username") value = String(value).trim();
+		if (key === "searchDebounceMs") value = Number(value);
+		(this.plugin.settings as unknown as Record<string, unknown>)[key] = value;
+		await this.plugin.saveSettings();
+		if (key === "serverUrl" || key === "username") this.queueAutoTest();
+		if (VIEW_REFRESH_KEYS.has(key)) this.plugin.refreshNowPlayingViews();
+		if (key === "lyricsAlign") this.applyLyricsPreview?.();
 	}
 
 	hide(): void {
@@ -195,51 +380,13 @@ export class StereoSettingTab extends PluginSettingTab {
 		}
 	}
 
-	/** A visually separated group of related settings with its own heading. */
-	private section(containerEl: HTMLElement, name: string): HTMLElement {
-		const section = containerEl.createDiv({ cls: "stereo-settings-section" });
-		new Setting(section).setName(name).setHeading();
-		return section;
-	}
-
 	// ------------------------------------------------------------------
 	// Connection
 
-	private displayConnection(containerEl: HTMLElement): void {
-		const server = this.section(containerEl, "Server");
-
-		new Setting(server)
-			.setName("Server URL")
-			.setDesc("Address of your Navidrome or Subsonic-compatible server.")
-			.addText((text) =>
-				text
-					.setPlaceholder("https://music.example.com")
-					.setValue(this.plugin.settings.serverUrl)
-					.onChange(async (value) => {
-						this.plugin.settings.serverUrl = value.trim();
-						await this.plugin.saveSettings();
-						this.queueAutoTest();
-					})
-			);
-
-		new Setting(server)
-			.setName("Username")
-			.setDesc("The account used to sign in.")
-			.addText((text) =>
-				text
-					.setValue(this.plugin.settings.username)
-					.onChange(async (value) => {
-						this.plugin.settings.username = value.trim();
-						await this.plugin.saveSettings();
-						this.queueAutoTest();
-					})
-			);
-
-		new Setting(server)
-			.setName("Password")
-			.setDesc(
-				"Stored in plain text in this plugin's data file inside your vault."
-			)
+	/** Masked text field with an eye toggle; the declarative controls have no
+	 * password type, so this row stays imperative. */
+	private renderPassword(setting: Setting): void {
+		setting
 			.addText((text) => {
 				text.inputEl.type = "password";
 				text.setValue(this.plugin.settings.password).onChange(
@@ -262,17 +409,12 @@ export class StereoSettingTab extends PluginSettingTab {
 					button.setTooltip(reveal ? "Hide password" : "Show password");
 				});
 			});
-
-		this.renderStatusRow(server);
-
-		// A fresh look at the page gets a fresh answer, without button-pressing.
-		if (this.hasCredentials() && this.connectionState === "untested") {
-			void this.testConnection();
-		}
 	}
 
-	private renderStatusRow(containerEl: HTMLElement): void {
-		const row = containerEl.createDiv({ cls: "stereo-conn-status" });
+	/** Live status dot + message + retest, in place of a normal setting row. */
+	private renderStatus(setting: Setting): () => void {
+		setting.settingEl.empty();
+		const row = setting.settingEl.createDiv({ cls: "stereo-conn-status" });
 		this.statusEl = row;
 
 		const retest = createEl("button", {
@@ -283,6 +425,15 @@ export class StereoSettingTab extends PluginSettingTab {
 
 		this.updateStatusUi();
 		row.appendChild(retest);
+
+		// A fresh look at the page gets a fresh answer, without button-pressing.
+		if (this.hasCredentials() && this.connectionState === "untested") {
+			void this.testConnection();
+		}
+
+		return () => {
+			if (this.statusEl === row) this.statusEl = null;
+		};
 	}
 
 	private updateStatusUi(): void {
@@ -347,237 +498,66 @@ export class StereoSettingTab extends PluginSettingTab {
 	}
 
 	// ------------------------------------------------------------------
-	// Playback
-
-	private displayPlayback(containerEl: HTMLElement): void {
-		const library = this.section(containerEl, "Library");
-
-		const click = new Setting(library)
-			.setName("Track click action")
-			.setDesc(
-				"What clicking a track does. Right-click always offers every action."
-			);
-		this.segmented(
-			click,
-			[
-				{ value: "play", label: "Play" },
-				{ value: "addToQueue", label: "Queue" },
-				{ value: "none", label: "Nothing" },
-			],
-			() => this.plugin.settings.trackClickAction,
-			async (value) => {
-				this.plugin.settings.trackClickAction = value;
-				await this.plugin.saveSettings();
-			}
-		);
-
-		const serverSection = this.section(containerEl, "Server");
-
-		new Setting(serverSection)
-			.setName("Scrobble plays")
-			.setDesc(
-				"Report finished plays to the server so play counts and history stay accurate."
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.scrobbleEnabled)
-					.onChange(async (value) => {
-						this.plugin.settings.scrobbleEnabled = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		const stations = this.section(containerEl, "Stations");
-
-		const batch = new Setting(stations)
-			.setName("Station batch size")
-			.setDesc("Tracks added per station batch, including each More press.");
-		this.stepper(
-			batch,
-			{ min: 10, max: 50, step: 5 },
-			() => this.plugin.settings.stationBatchSize,
-			async (value) => {
-				this.plugin.settings.stationBatchSize = value;
-				await this.plugin.saveSettings();
-			}
-		);
-	}
-
-	// ------------------------------------------------------------------
 	// Appearance
 
-	private displayAppearance(containerEl: HTMLElement): void {
-		const nowPlaying = this.section(containerEl, "Now playing");
-
-		new Setting(nowPlaying)
-			.setName("Now playing view")
-			.setDesc("How the current track is presented on the Now Playing screen.")
-			.addDropdown((dropdown) => {
-				for (const opt of NOW_PLAYING_VIEWS) dropdown.addOption(opt.value, opt.label);
-				return dropdown
-					.setValue(this.plugin.settings.nowPlayingView)
-					.onChange(async (value) => {
-						this.plugin.settings.nowPlayingView = value as NowPlayingView;
-						await this.plugin.saveSettings();
-						this.plugin.refreshNowPlayingViews();
-					});
-			});
-
-		new Setting(nowPlaying)
-			.setName("Internet-radio visualization")
-			.setDesc(
-				"What a radio stream shows instead of your chosen view. Radio has no album art and its audio can't be visualized, so the radio tower is the natural fit; the portable radio just idles."
-			)
-			.addDropdown((dropdown) => {
-				for (const opt of RADIO_VISUALIZATIONS)
-					dropdown.addOption(opt.value, opt.label);
-				return dropdown
-					.setValue(this.plugin.settings.radioVisualization)
-					.onChange(async (value) => {
-						this.plugin.settings.radioVisualization = value as RadioVisualization;
-						await this.plugin.saveSettings();
-						this.plugin.refreshNowPlayingViews();
-					});
-			});
-
-		const lyrics = this.section(containerEl, "Lyrics");
-
-		new Setting(lyrics)
-			.setName("Look up lyrics online")
-			.setDesc(
-				"When your server has no lyrics for a track, ask the free LRCLIB database. Only the track's title, artist, album, and length are sent."
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.lyricsOnlineLookup)
-					.onChange(async (value) => {
-						this.plugin.settings.lyricsOnlineLookup = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		let preview: HTMLElement;
-		const applyPreview = (): void => {
-			preview.style.fontSize = `${this.plugin.settings.lyricsFontSize}px`;
-			preview.style.fontFamily = this.plugin.settings.lyricsFontFamily || "";
-			preview.style.textAlign = this.plugin.settings.lyricsAlign;
-		};
-
-		new Setting(lyrics)
-			.setName("Auto-adjust size")
-			.setDesc(
-				"Scale the lyrics text with the panel size, the way the album art fills its space. When off, the fixed size below is used."
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.lyricsAutoSize)
-					.onChange(async (value) => {
-						this.plugin.settings.lyricsAutoSize = value;
-						await this.plugin.saveSettings();
-						this.plugin.refreshNowPlayingViews();
-					})
-			);
-
-		const size = new Setting(lyrics)
-			.setName("Font size")
-			.setDesc("Size of the lyrics text, in pixels. Used when auto-adjust is off.");
-		this.stepper(
-			size,
-			{ min: 12, max: 28, step: 1 },
-			() => this.plugin.settings.lyricsFontSize,
-			async (value) => {
-				this.plugin.settings.lyricsFontSize = value;
-				await this.plugin.saveSettings();
-				this.plugin.refreshNowPlayingViews();
-				applyPreview();
-			}
-		);
-
-		new Setting(lyrics)
-			.setName("Font")
-			.setDesc("Font family for the lyrics. Leave empty to use the theme font.")
-			.addText((text) => {
-				const listId = "stereo-font-suggestions";
-				let datalist = document.getElementById(listId);
-				if (!datalist) {
-					datalist = createEl("datalist", { attr: { id: listId } });
-					for (const font of FONT_SUGGESTIONS) {
-						datalist.createEl("option", { attr: { value: font } });
-					}
-					text.inputEl.insertAdjacentElement("afterend", datalist);
+	/** Free-text font field with a datalist of suggestions. */
+	private renderFontField(setting: Setting): void {
+		setting.addText((text) => {
+			const listId = "stereo-font-suggestions";
+			let datalist = document.getElementById(listId);
+			if (!datalist) {
+				datalist = createEl("datalist", { attr: { id: listId } });
+				for (const font of FONT_SUGGESTIONS) {
+					datalist.createEl("option", { attr: { value: font } });
 				}
-				text.inputEl.setAttr("list", listId);
-				text
-					.setPlaceholder("Theme font")
-					.setValue(this.plugin.settings.lyricsFontFamily)
-					.onChange(async (value) => {
-						this.plugin.settings.lyricsFontFamily = value;
-						await this.plugin.saveSettings();
-						this.plugin.refreshNowPlayingViews();
-						applyPreview();
-					});
-			});
+				text.inputEl.insertAdjacentElement("afterend", datalist);
+			}
+			text.inputEl.setAttr("list", listId);
+			text
+				.setPlaceholder("Theme font")
+				.setValue(this.plugin.settings.lyricsFontFamily)
+				.onChange(async (value) => {
+					this.plugin.settings.lyricsFontFamily = value;
+					await this.plugin.saveSettings();
+					this.plugin.refreshNowPlayingViews();
+					this.applyLyricsPreview?.();
+				});
+		});
+	}
 
-		new Setting(lyrics)
-			.setName("Alignment")
-			.setDesc("How the lyrics text is aligned in the panel.")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("left", "Left")
-					.addOption("center", "Centered")
-					.addOption("right", "Right")
-					.setValue(this.plugin.settings.lyricsAlign)
-					.onChange(async (value) => {
-						this.plugin.settings.lyricsAlign = value as LyricsAlign;
-						await this.plugin.saveSettings();
-						this.plugin.refreshNowPlayingViews();
-						applyPreview();
-					})
-			);
-
-		preview = lyrics.createDiv({ cls: "stereo-lyrics-preview" });
+	/** Three sample lines styled live by the size / font / alignment values. */
+	private renderLyricsPreview(setting: Setting): () => void {
+		setting.settingEl.empty();
+		const preview = setting.settingEl.createDiv({
+			cls: "stereo-lyrics-preview",
+		});
 		preview.createDiv({ text: "So you go, and you stand on your own" });
 		preview.createDiv({
 			cls: "stereo-lyrics-preview-active",
 			text: "And you leave on your own",
 		});
 		preview.createDiv({ text: "And you go home, and you cry" });
-		applyPreview();
+
+		const apply = (): void => {
+			preview.style.fontSize = `${this.plugin.settings.lyricsFontSize}px`;
+			preview.style.fontFamily = this.plugin.settings.lyricsFontFamily || "";
+			preview.style.textAlign = this.plugin.settings.lyricsAlign;
+		};
+		this.applyLyricsPreview = apply;
+		apply();
+
+		return () => {
+			if (this.applyLyricsPreview === apply) this.applyLyricsPreview = null;
+		};
 	}
 
 	// ------------------------------------------------------------------
 	// Search
 
-	private displaySearch(containerEl: HTMLElement): void {
-		const behavior = this.section(containerEl, "Behavior");
-
-		new Setting(behavior)
-			.setName("Search speed")
-			.setDesc("How quickly results appear after you stop typing.")
-			.addDropdown((dropdown) => {
-				for (const { ms, label } of SEARCH_SPEEDS) {
-					dropdown.addOption(String(ms), label);
-				}
-				dropdown
-					.setValue(String(nearestSearchSpeed(this.plugin.settings.searchDebounceMs)))
-					.onChange(async (value) => {
-						this.plugin.settings.searchDebounceMs = Number(value);
-						await this.plugin.saveSettings();
-					});
-			});
-
-		const results = this.section(containerEl, "Results per group");
-		this.countSetting(results, "Artists", "searchArtistCount");
-		this.countSetting(results, "Albums", "searchAlbumCount");
-		this.countSetting(results, "Tracks", "searchSongCount");
-	}
-
-	private countSetting(
-		containerEl: HTMLElement,
-		name: string,
+	private countStepper(
+		setting: Setting,
 		key: "searchArtistCount" | "searchAlbumCount" | "searchSongCount"
 	): void {
-		const setting = new Setting(containerEl).setName(name);
 		this.stepper(
 			setting,
 			{ min: 1, max: 20, step: 1 },

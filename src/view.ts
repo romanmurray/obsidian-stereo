@@ -628,14 +628,12 @@ export class StereoView extends ItemView {
 				);
 			}
 		);
-		this.favoriteButton = this.iconButton(extrasRow, "heart", "Add to favorites", async () => {
+		this.favoriteButton = this.iconButton(extrasRow, "heart", "Add to favorites", () => {
 			const track = this.plugin.player.getState().track;
 			if (!track || track.streamUrl) return;
-			try {
-				await this.plugin.toggleSongFavorite(track);
-			} catch {
+			this.plugin.toggleSongFavorite(track).catch(() => {
 				new Notice("Could not update favorites on the server.");
-			}
+			});
 		});
 
 		this.errorEl = page.createDiv({ cls: "stereo-error" });
@@ -727,14 +725,16 @@ export class StereoView extends ItemView {
 			new Notice("The queue has no tracks to save.");
 			return;
 		}
-		new PlaylistNameModal(this.app, async (name) => {
-			try {
-				await this.plugin.client.createPlaylist(name, songIds);
-				new Notice(`Saved "${name}" with ${songIds.length} tracks.`);
-				this.library.invalidatePlaylists();
-			} catch {
-				new Notice("Could not save the playlist on the server.");
-			}
+		new PlaylistNameModal(this.app, (name) => {
+			this.plugin.client
+				.createPlaylist(name, songIds)
+				.then(() => {
+					new Notice(`Saved "${name}" with ${songIds.length} tracks.`);
+					this.library.invalidatePlaylists();
+				})
+				.catch(() => {
+					new Notice("Could not save the playlist on the server.");
+				});
 		}).open();
 	}
 

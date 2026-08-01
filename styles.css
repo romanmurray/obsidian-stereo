@@ -43,37 +43,6 @@
 
 /* Settings tab */
 
-/* Pill tab bar: quiet resting state, filled active pill. */
-.stereo-settings-tabs {
-	display: flex;
-	gap: var(--size-2-2);
-	margin-bottom: var(--size-4-4);
-	flex-wrap: wrap;
-}
-
-.stereo-settings-tab {
-	padding: var(--size-2-3) var(--size-4-4);
-	border-radius: var(--radius-l);
-	border: 1px solid var(--background-modifier-border);
-	background: transparent;
-	color: var(--text-muted);
-	cursor: pointer;
-	box-shadow: none;
-}
-
-.stereo-settings-tab:hover {
-	color: var(--text-normal);
-	background: var(--background-modifier-hover);
-}
-
-.stereo-settings-tab-active,
-.stereo-settings-tab-active:hover {
-	color: var(--text-on-accent);
-	background: var(--interactive-accent);
-	border-color: var(--interactive-accent);
-	font-weight: var(--font-semibold);
-}
-
 /* Connection status: colored dot + live message + retest, under the fields. */
 .stereo-conn-status {
 	display: flex;
@@ -222,21 +191,6 @@
 .stereo-lyrics-preview-active {
 	color: var(--text-normal);
 	font-weight: var(--font-semibold);
-}
-
-.stereo-settings-section {
-	padding: var(--size-4-2) 0 var(--size-4-4);
-}
-
-.stereo-settings-section + .stereo-settings-section {
-	border-top: 1px solid var(--background-modifier-border);
-}
-
-/* Obsidian gives headings a top border by default — the section divider
-   replaces it, and the first section sits directly under the tab bar. */
-.stereo-settings .setting-item-heading {
-	border-top: none;
-	padding-top: 0;
 }
 
 /* Search */

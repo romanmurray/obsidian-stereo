@@ -1,4 +1,5 @@
-import { createHash, randomBytes } from "crypto";
+import { requestUrl, type RequestUrlResponse } from "obsidian";
+import { md5Hex } from "./md5";
 import type { StereoSettings } from "./settings";
 
 /**
@@ -167,8 +168,11 @@ export class SubsonicClient {
 		}
 
 		const base = serverUrl.replace(/\/+$/, "");
-		const salt = randomBytes(8).toString("hex");
-		const token = createHash("md5").update(password + salt).digest("hex");
+		const saltBytes = window.crypto.getRandomValues(new Uint8Array(8));
+		const salt = [...saltBytes]
+			.map((byte) => byte.toString(16).padStart(2, "0"))
+			.join("");
+		const token = md5Hex(password + salt);
 
 		const query = new URLSearchParams({
 			u: username,
@@ -195,13 +199,13 @@ export class SubsonicClient {
 	): Promise<SubsonicEnvelope["subsonic-response"]> {
 		const url = this.buildUrl(endpoint, params);
 
-		let response: Response;
+		let response: RequestUrlResponse;
 		try {
-			response = await fetch(url);
+			response = await requestUrl({ url, throw: false });
 		} catch {
 			throw new SubsonicError("unreachable", "Could not reach the server.");
 		}
-		if (!response.ok) {
+		if (response.status < 200 || response.status >= 300) {
 			throw new SubsonicError(
 				"unreachable",
 				`Server responded with HTTP ${response.status}.`,
@@ -211,7 +215,7 @@ export class SubsonicClient {
 
 		let envelope: SubsonicEnvelope;
 		try {
-			envelope = (await response.json()) as SubsonicEnvelope;
+			envelope = response.json as SubsonicEnvelope;
 		} catch {
 			throw new SubsonicError(
 				"unreachable",
