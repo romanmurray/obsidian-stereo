@@ -830,7 +830,6 @@ export class StereoView extends ItemView {
 		this.shuffleButton.disabled = state.queue.length < 2;
 		this.stationButton.disabled = !state.track || !!state.track.streamUrl;
 		this.stationButton.toggleClass("stereo-button-active", !!state.station);
-		this.lyricsButton.disabled = !state.track || !!state.track.streamUrl;
 
 		if (this.lyricsVisible) {
 			if ((state.track?.id ?? null) !== this.lyricsLoadedFor) {
