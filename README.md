@@ -25,6 +25,9 @@ your notes.
   takes over when you navigate elsewhere.
 - Lyrics with follow-along highlighting for synced lyrics — click a line to
   seek. Plain lyrics scroll normally.
+- Feeling lucky? A dice button plays a random song from your library.
+- Media keys and the system playback overlay control Stereo and show the
+  current track.
 - Scrobbles plays back to your server so play counts stay accurate.
 
 **Library**
