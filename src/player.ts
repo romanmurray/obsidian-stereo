@@ -65,6 +65,8 @@ export class PlayerStore {
 	private captureSource: MediaStreamAudioSourceNode | null = null;
 	/** Whether the current load has already scrobbled a completed play. */
 	private scrobbleSubmitted = false;
+	/** Track the OS media session metadata was last built for. */
+	private mediaSessionTrackKey: string | null = null;
 
 	private state: PlayerState = {
 		queue: [],
@@ -93,6 +95,7 @@ export class PlayerStore {
 		this.audio.addEventListener("loadedmetadata", this.onLoadedMetadata);
 		this.audio.addEventListener("ended", this.onEnded);
 		this.audio.addEventListener("error", this.onError);
+		this.registerMediaSessionHandlers();
 	}
 
 	// --- subscription & persistence wiring ---
@@ -146,6 +149,7 @@ export class PlayerStore {
 	private update(patch: Partial<PlayerState>): void {
 		this.state = { ...this.state, ...patch };
 		this.notify();
+		this.syncMediaSession();
 	}
 
 	private persistNow(): void {
@@ -402,6 +406,72 @@ export class PlayerStore {
 		this.persistNow();
 	}
 
+	// --- OS media session (media keys, system playback overlay) ---
+
+	/** Wire the OS transport controls to the store. Handlers live for the
+	 * store's lifetime; destroy() detaches them. */
+	private registerMediaSessionHandlers(): void {
+		const session = navigator.mediaSession;
+		if (!session) return;
+		try {
+			session.setActionHandler("play", () => {
+				if (!this.state.playing) void this.togglePlayPause();
+			});
+			session.setActionHandler("pause", () => {
+				if (this.state.playing) void this.togglePlayPause();
+			});
+			session.setActionHandler("previoustrack", () => {
+				void this.previous();
+			});
+			session.setActionHandler("nexttrack", () => {
+				void this.next();
+			});
+			session.setActionHandler("seekto", (details) => {
+				if (details.seekTime != null) this.seek(details.seekTime);
+			});
+		} catch {
+			// An engine without one of these actions throws — the rest still work.
+		}
+	}
+
+	/** Mirror state into the OS media session. Metadata rebuilds only on track
+	 * change; playback/position state follow every update. */
+	private syncMediaSession(): void {
+		const session = navigator.mediaSession;
+		if (!session) return;
+		const track = this.state.track;
+		if (!track) {
+			session.metadata = null;
+			session.playbackState = "none";
+			this.mediaSessionTrackKey = null;
+			return;
+		}
+		session.playbackState = this.state.playing ? "playing" : "paused";
+		const key = track.streamUrl ?? track.id;
+		if (key !== this.mediaSessionTrackKey) {
+			this.mediaSessionTrackKey = key;
+			session.metadata = new MediaMetadata({
+				title: track.title,
+				artist: track.artist ?? "",
+				album: track.album ?? "",
+				artwork: track.coverArt
+					? [{ src: this.client.coverArtUrl(track.coverArt, 512) }]
+					: [],
+			});
+		}
+		// Radio streams have no meaningful duration — leave the position bar off.
+		const { position, duration } = this.state;
+		if (Number.isFinite(duration) && duration > 0 && position <= duration) {
+			try {
+				session.setPositionState({ duration, position, playbackRate: 1 });
+			} catch {
+				/* out-of-range race during a track switch — next update corrects it */
+			}
+		} else {
+			session.setPositionState();
+		}
+	}
+
 	/**
 	 * Analyser fed by a capture of the audio element's output (PRD §5.8). The
 	 * element keeps playing directly — the graph only listens to a copy — so
@@ -476,6 +546,24 @@ export class PlayerStore {
 	/** Stop playback and release resources. Called from plugin onunload. */
 	destroy(): void {
 		this.persistNow();
+		const session = navigator.mediaSession;
+		if (session) {
+			for (const action of [
+				"play",
+				"pause",
+				"previoustrack",
+				"nexttrack",
+				"seekto",
+			] as MediaSessionAction[]) {
+				try {
+					session.setActionHandler(action, null);
+				} catch {
+					/* action unsupported by this engine */
+				}
+			}
+			session.metadata = null;
+			session.playbackState = "none";
+		}
 		this.audio.pause();
 		this.audio.removeEventListener("play", this.onPlay);
 		this.audio.removeEventListener("playing", this.onPlaying);
