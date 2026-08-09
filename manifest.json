@@ -1,7 +1,7 @@
 {
 	"id": "stereo",
 	"name": "Stereo",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"minAppVersion": "1.13.0",
 	"description": "Stream music from your Navidrome or Subsonic-compatible server with a sidebar player, library browser, and queue.",
 	"author": "Roman Murray",
