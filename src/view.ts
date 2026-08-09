@@ -610,6 +610,21 @@ export class StereoView extends ItemView {
 			this.lyricsVisible = !this.lyricsVisible;
 			this.applyLyricsVisibility();
 		});
+		this.iconButton(extrasRow, "dices", "Play a random song", () => {
+			void (async () => {
+				try {
+					const songs = await this.plugin.client.getRandomSongs(1);
+					const song = songs[0];
+					if (!song) {
+						new Notice("The server returned no random song.");
+						return;
+					}
+					await this.plugin.player.playTrack(song);
+				} catch {
+					new Notice("Could not fetch a random song from the server.");
+				}
+			})();
+		});
 		this.stationButton = this.iconButton(
 			extrasRow,
 			"disc-3",
