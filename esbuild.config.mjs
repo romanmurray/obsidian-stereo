@@ -11,6 +11,10 @@ const context = await esbuild.context({
 	bundle: true,
 	external: ["obsidian", "electron", ...builtins],
 	format: "cjs",
+	// Visualizer base illustrations are inlined into the bundle: the community
+	// installer only delivers main.js/manifest.json/styles.css, so loose asset
+	// files never reach store installs.
+	loader: { ".svg": "text" },
 	target: "es2021",
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",

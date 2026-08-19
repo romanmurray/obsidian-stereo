@@ -1,4 +1,7 @@
-import { ItemView, Menu, Notice, WorkspaceLeaf, normalizePath, setIcon } from "obsidian";
+import { ItemView, Menu, Notice, WorkspaceLeaf, setIcon } from "obsidian";
+import radioTowerSvg from "../radio-tower.svg";
+import boomboxSvg from "../boombox.svg";
+import stereoBoomboxSvg from "../stereo-boombox.svg";
 import { getLyrics, type Lyrics } from "./lyrics";
 import { LibraryPane } from "./library";
 import { PlaylistNameModal } from "./modals";
@@ -10,6 +13,11 @@ import { NOW_PLAYING_VIEWS, type NowPlayingView } from "./settings";
 import type { Song } from "./subsonic";
 
 export const STEREO_VIEW_TYPE = "stereo-player";
+
+/** UTF-8-safe data URI for an inlined SVG (btoa would choke on non-Latin-1). */
+function svgDataUri(svg: string): string {
+	return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
 
 /** Queue is a full page like the others, but has no top tab — the player's
  * list icon (and the mini player's) navigates to it. */
@@ -516,20 +524,12 @@ export class StereoView extends ItemView {
 		this.registerDomEvent(this.artWrap, "contextmenu", (evt) =>
 			this.showNowPlayingMenu(evt)
 		);
-		// Radio-tower view's base illustration ships in the plugin folder.
-		const dir = this.plugin.manifest.dir ?? "";
-		const towerUrl = this.app.vault.adapter.getResourcePath(
-			normalizePath(`${dir}/radio-tower.svg`)
-		);
-		this.viz.setTowerImage(towerUrl);
-		const boomboxUrl = this.app.vault.adapter.getResourcePath(
-			normalizePath(`${dir}/boombox.svg`)
-		);
-		this.viz.setBoomboxImage(boomboxUrl);
-		const stereoUrl = this.app.vault.adapter.getResourcePath(
-			normalizePath(`${dir}/stereo-boombox.svg`)
-		);
-		this.viz.setStereoImage(stereoUrl);
+		// Base illustrations are bundled into main.js (store installs only
+		// receive main.js/manifest.json/styles.css, never loose plugin-folder
+		// files) and handed over as data URIs.
+		this.viz.setTowerImage(svgDataUri(radioTowerSvg));
+		this.viz.setBoomboxImage(svgDataUri(boomboxSvg));
+		this.viz.setStereoImage(svgDataUri(stereoBoomboxSvg));
 
 		// Lyrics panel: swaps in for the art area, sized by the same variable.
 		this.lyricsWrap = page.createDiv({ cls: "stereo-lyrics-wrap stereo-hidden" });
