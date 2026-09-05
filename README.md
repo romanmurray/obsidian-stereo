@@ -43,6 +43,10 @@ your notes.
 **Queue & stations**
 - Full-page queue with playback modes, save-as-playlist, and persistence across
   Obsidian restarts.
+- Drag tracks to reorder, or right-click a queue entry to move it next without
+  interrupting playback. Duplicate entries can be moved independently.
+- Undo the last queue clear or replacement, including station changes. Undo
+  lasts until another queue edit or plugin restart.
 - Stations: seed from any song, album, or artist to build a batch of similar
   tracks, then extend it or save it as a playlist.
 
@@ -87,6 +91,7 @@ and search tuning.
 npm install
 npm run dev    # watch build
 npm run build  # type-check + production build
+npm test       # playback store regression tests
 ```
 
 ## Support

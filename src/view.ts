@@ -92,6 +92,10 @@ export class StereoView extends ItemView {
 	private queueTitleEl!: HTMLElement;
 	private moreButton!: HTMLButtonElement;
 	private queueList!: HTMLElement;
+	private undoButton!: HTMLButtonElement;
+	private queueErrorEl!: HTMLElement;
+	private queueDrag: { queue: Song[]; index: number } | null = null;
+	private queueDropRow: HTMLElement | null = null;
 
 	// Mini player (visible on every screen except Now Playing)
 	private miniEl!: HTMLElement;
@@ -695,7 +699,96 @@ export class StereoView extends ItemView {
 		this.registerDomEvent(clearButton, "click", () => {
 			this.plugin.player.clearQueue();
 		});
+		this.undoButton = actions.createEl("button", {
+			cls: "stereo-button stereo-text-button clickable-icon",
+			text: "Undo",
+			attr: { "aria-label": "Undo queue replacement or clear" },
+		});
+		this.registerDomEvent(this.undoButton, "click", () => {
+			void this.plugin.player.undoQueue();
+		});
+		this.queueErrorEl = page.createDiv({ cls: "stereo-error", attr: { role: "status" } });
 		this.queueList = page.createDiv({ cls: "stereo-queue-list" });
+		this.registerQueueEvents();
+	}
+
+	private registerQueueEvents(): void {
+		const rowAt = (target: EventTarget | null): HTMLElement | null =>
+			target instanceof Element ? target.closest<HTMLElement>(".stereo-queue-row") : null;
+		this.registerDomEvent(this.queueList, "click", (event) => {
+			const row = rowAt(event.target);
+			if (!row || !(event.target instanceof Element)) return;
+			const index = Number(row.dataset.queueIndex);
+			if (event.target.closest(".stereo-queue-row-remove")) void this.plugin.player.removeAt(index);
+			else if (event.target.closest(".stereo-queue-row-meta")) void this.plugin.player.playAt(index);
+		});
+		this.registerDomEvent(this.queueList, "contextmenu", (event) => {
+			const row = rowAt(event.target);
+			if (!row) return;
+			event.preventDefault();
+			this.showQueueMenu(Number(row.dataset.queueIndex), event);
+		});
+		this.registerDomEvent(this.queueList, "keydown", (event) => {
+			const row = rowAt(event.target);
+			if (!row || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
+			event.preventDefault();
+			const rect = row.getBoundingClientRect();
+			this.showQueueMenu(Number(row.dataset.queueIndex), { x: rect.left, y: rect.bottom });
+		});
+		this.registerDomEvent(this.queueList, "dragstart", (event) => {
+			const row = rowAt(event.target);
+			if (!row || !event.dataTransfer) return;
+			const index = Number(row.dataset.queueIndex);
+			this.queueDrag = { queue: this.plugin.player.getState().queue, index };
+			event.dataTransfer.effectAllowed = "move";
+			event.dataTransfer.setData("text/plain", String(index));
+		});
+		this.registerDomEvent(this.queueList, "dragover", (event) => {
+			if (!this.queueDrag || this.queueDrag.queue !== this.plugin.player.getState().queue) return;
+			event.preventDefault();
+			if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+			this.clearQueueDropMarker();
+			const row = rowAt(event.target) ?? (this.queueList.lastElementChild as HTMLElement | null);
+			if (!row) return;
+			const rect = row.getBoundingClientRect();
+			row.addClass(event.clientY < rect.top + rect.height / 2 ? "stereo-queue-drop-before" : "stereo-queue-drop-after");
+			this.queueDropRow = row;
+		});
+		this.registerDomEvent(this.queueList, "drop", (event) => {
+			const drag = this.queueDrag;
+			const row = this.queueDropRow;
+			if (drag && row && drag.queue === this.plugin.player.getState().queue) {
+				event.preventDefault();
+				const boundary = Number(row.dataset.queueIndex) + (row.hasClass("stereo-queue-drop-after") ? 1 : 0);
+				this.plugin.player.moveQueueEntry(drag.index, boundary > drag.index ? boundary - 1 : boundary);
+			}
+			this.queueDrag = null;
+			this.clearQueueDropMarker();
+		});
+		this.registerDomEvent(this.queueList, "dragleave", (event) => {
+			if (!(event.relatedTarget instanceof Node) || !this.queueList.contains(event.relatedTarget)) this.clearQueueDropMarker();
+		});
+		this.registerDomEvent(this.queueList, "dragend", () => {
+			this.queueDrag = null;
+			this.clearQueueDropMarker();
+		});
+	}
+
+	private clearQueueDropMarker(): void {
+		this.queueDropRow?.removeClass("stereo-queue-drop-before", "stereo-queue-drop-after");
+		this.queueDropRow = null;
+	}
+
+	private showQueueMenu(index: number, position: { x: number; y: number }): void {
+		const queue = this.plugin.player.getState().queue;
+		const menu = new Menu();
+		menu.addItem((item) => {
+			item.setTitle("Move to next").setIcon("list-plus")
+				.setDisabled(!this.plugin.player.canMoveToNext(index)).onClick(() => {
+					if (this.plugin.player.getState().queue === queue) this.plugin.player.moveToNext(index);
+				});
+		});
+		menu.showAtPosition(position);
 	}
 
 	private buildMiniPlayer(root: HTMLElement): void {
@@ -858,6 +951,9 @@ export class StereoView extends ItemView {
 			state.station ? `Station: ${state.station.label}` : "Queue"
 		);
 		this.moreButton.toggleClass("stereo-hidden", !state.station);
+		this.undoButton.disabled = !state.canUndo;
+		this.queueErrorEl.setText(state.error ?? "");
+		this.queueErrorEl.toggleClass("stereo-error-visible", state.error != null);
 
 		this.seekSlider.max = String(Math.floor(state.duration));
 		if (!this.seeking) {
@@ -911,6 +1007,8 @@ export class StereoView extends ItemView {
 	}
 
 	private renderQueue(state: Readonly<PlayerState>): void {
+		this.queueDrag = null;
+		this.clearQueueDropMarker();
 		this.queueList.empty();
 		if (state.queue.length === 0) {
 			this.queueList.createDiv({
@@ -921,6 +1019,12 @@ export class StereoView extends ItemView {
 		}
 		state.queue.forEach((song, i) => {
 			const row = this.queueList.createDiv({ cls: "stereo-queue-row" });
+			row.dataset.queueIndex = String(i);
+			row.draggable = true;
+			row.tabIndex = 0;
+			row.setAttribute("aria-label", `${i + 1}. ${song.title}. Drag to reorder or open the context menu.`);
+			const handle = row.createSpan({ cls: "stereo-queue-drag-handle", attr: { "aria-hidden": "true" } });
+			setIcon(handle, "grip-vertical");
 			row.toggleClass("stereo-queue-row-current", i === state.index);
 
 			// Queue position (1-based) — not the album track number.
@@ -929,18 +1033,12 @@ export class StereoView extends ItemView {
 			const meta = row.createDiv({ cls: "stereo-queue-row-meta" });
 			meta.createDiv({ cls: "stereo-queue-row-title", text: song.title });
 			meta.createDiv({ cls: "stereo-queue-row-artist", text: song.artist ?? "" });
-			this.registerDomEvent(meta, "click", () => {
-				void this.plugin.player.playAt(i);
-			});
 
 			const removeButton = row.createEl("button", {
 				cls: "stereo-button clickable-icon stereo-queue-row-remove",
 				attr: { "aria-label": "Remove from queue" },
 			});
 			setIcon(removeButton, "x");
-			this.registerDomEvent(removeButton, "click", () => {
-				void this.plugin.player.removeAt(i);
-			});
 		});
 	}
 }

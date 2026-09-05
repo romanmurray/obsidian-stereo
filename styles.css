@@ -585,6 +585,8 @@
 
 .stereo-queue-header {
 	display: flex;
+	flex-wrap: wrap;
+	gap: var(--size-2-2);
 	align-items: center;
 	justify-content: space-between;
 	margin-bottom: var(--size-4-2);
@@ -630,6 +632,29 @@
 
 .stereo-queue-row:hover {
 	background: var(--background-modifier-hover);
+}
+
+.stereo-queue-drag-handle {
+	display: flex;
+	color: var(--text-faint);
+	cursor: grab;
+}
+
+.stereo-queue-drag-handle:active {
+	cursor: grabbing;
+}
+
+.stereo-queue-drop-before {
+	box-shadow: inset 0 2px var(--interactive-accent);
+}
+
+.stereo-queue-drop-after {
+	box-shadow: inset 0 -2px var(--interactive-accent);
+}
+
+.stereo-queue-row:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: -2px;
 }
 
 /* The current track is marked by accent text alone — no card treatment. */
