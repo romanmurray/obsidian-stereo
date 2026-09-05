@@ -43,6 +43,8 @@ your notes.
 **Queue & stations**
 - Full-page queue with playback modes, save-as-playlist, and persistence across
   Obsidian restarts.
+- Repeat control beside shuffle cycles through off, queue, and track. The choice
+  survives restarts; Next skips ahead even with repeat track. Live radio does not repeat.
 - Drag tracks to reorder, or right-click a queue entry to move it next without
   interrupting playback. Duplicate entries can be moved independently.
 - Undo the last queue clear or replacement, including station changes. Undo

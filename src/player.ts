@@ -2,6 +2,8 @@ import type { StereoSettings } from "./settings";
 import { buildStationBatch, type StationSeed } from "./station";
 import type { Song, SubsonicClient } from "./subsonic";
 
+export type RepeatMode = "off" | "queue" | "track";
+
 export interface PlayerState {
 	/** The play queue. `queue[index]` is the current track. */
 	queue: Song[];
@@ -16,6 +18,7 @@ export interface PlayerState {
 	duration: number;
 	/** 0..1 */
 	volume: number;
+	repeat: RepeatMode;
 	/** Seed of the active station, or null when the queue is a plain queue. */
 	station: StationSeed | null;
 	/** A session-only queue replacement can be undone. */
@@ -30,6 +33,8 @@ export interface PlayerSnapshot {
 	index: number;
 	position: number;
 	volume: number;
+	/** Optional for saved sessions from before repeat support. */
+	repeat?: RepeatMode;
 	station?: StationSeed;
 }
 
@@ -88,6 +93,7 @@ export class PlayerStore {
 		position: 0,
 		duration: 0,
 		volume: 0.5,
+		repeat: "off",
 		station: null,
 		canUndo: false,
 		error: null,
@@ -151,6 +157,7 @@ export class PlayerStore {
 			position: track ? Math.max(0, snapshot.position) : 0,
 			duration: track?.duration ?? 0,
 			volume,
+			repeat: snapshot.repeat === "queue" || snapshot.repeat === "track" ? snapshot.repeat : "off",
 			station: snapshot.station ?? null,
 			error: null,
 		});
@@ -174,6 +181,7 @@ export class PlayerStore {
 			index: this.state.index,
 			position: this.state.position,
 			volume: this.state.volume,
+			repeat: this.state.repeat,
 			station: this.state.station ?? undefined,
 		});
 	}
@@ -192,7 +200,7 @@ export class PlayerStore {
 		this.state = { ...this.state, canUndo: false };
 	}
 
-	/** Restore the last cleared/replaced queue. Volume is independent of undo. */
+	/** Restore the last cleared/replaced queue. Volume and repeat are independent of undo. */
 	async undoQueue(): Promise<void> {
 		const snapshot = this.undoSnapshot;
 		if (!snapshot) return;
@@ -291,6 +299,7 @@ export class PlayerStore {
 		}
 		if (index < this.state.index) {
 			this.update({ queue, index: this.state.index - 1 });
+			this.prefetchNext();
 			this.persistNow();
 			return;
 		}
@@ -350,11 +359,33 @@ export class PlayerStore {
 		this.persistNow();
 	}
 
-	/** Advance to the next queue entry. At the queue end this is a no-op. */
+	/** Automatic completion honors repeat track; explicit next skips it. */
+	private nextIndex(automatic: boolean): number {
+		const { queue, index, track, repeat } = this.state;
+		if (!track || index < 0 || queue.length === 0) return -1;
+		if (automatic && track.streamUrl) return -1;
+		if (automatic && repeat === "track") return index;
+		if (index + 1 < queue.length) return index + 1;
+		return repeat === "queue" && !track.streamUrl ? 0 : -1;
+	}
+
+	canNext(): boolean {
+		return this.nextIndex(false) >= 0;
+	}
+
+	/** Advance explicitly, wrapping only for repeat queue on songs. */
 	async next(): Promise<void> {
-		if (this.state.index + 1 >= this.state.queue.length) return;
-		this.update({ index: this.state.index + 1 });
+		const index = this.nextIndex(false);
+		if (index < 0) return;
+		this.update({ index });
 		await this.loadCurrent(true);
+	}
+
+	cycleRepeat(): void {
+		const repeat = this.state.repeat === "off" ? "queue" : this.state.repeat === "queue" ? "track" : "off";
+		this.update({ repeat });
+		this.prefetchNext();
+		this.persistNow();
 	}
 
 	/**
@@ -735,9 +766,9 @@ export class PlayerStore {
 		}
 	}
 
-	/** Warm the browser cache for the next queue entry. */
+	/** Warm the browser cache for the next automatic playback target. */
 	private prefetchNext(): void {
-		const nextTrack = this.state.queue[this.state.index + 1];
+		const nextTrack = this.state.queue[this.nextIndex(true)];
 		// Never prefetch direct-URL entries (internet radio): they are live
 		// streams, so "warming" one would hold an open connection.
 		if (!nextTrack || nextTrack.streamUrl) {
@@ -748,8 +779,13 @@ export class PlayerStore {
 		this.dropPrefetch();
 		this.prefetchAudio = new Audio();
 		this.prefetchAudio.preload = "auto";
-		this.prefetchAudio.src = this.client.streamUrl(nextTrack.id);
-		this.prefetchedId = nextTrack.id;
+		try {
+			this.prefetchAudio.src = this.client.streamUrl(nextTrack.id);
+			this.prefetchedId = nextTrack.id;
+		} catch {
+			// A cache warm-up failure must not interrupt playback or repeat changes.
+			this.dropPrefetch();
+		}
 	}
 
 	/** Record the play once it passes half the track or SCROBBLE_AFTER_SECONDS. */
@@ -827,8 +863,12 @@ export class PlayerStore {
 	};
 
 	private onEnded = (): void => {
-		if (this.state.index + 1 < this.state.queue.length) {
-			void this.next();
+		// A queued event from a replaced source, or a failed load, is not completion.
+		if (!this.audio.ended || this.audio.error || this.state.error || !this.state.track) return;
+		const index = this.nextIndex(true);
+		if (index >= 0) {
+			this.update({ index });
+			void this.loadCurrent(true);
 		} else {
 			this.update({ playing: false, position: 0 });
 			this.persistNow();

@@ -70,6 +70,7 @@ export class StereoView extends ItemView {
 	private nextButton!: HTMLButtonElement;
 	private volumeSlider!: HTMLInputElement;
 	private shuffleButton!: HTMLButtonElement;
+	private repeatButton!: HTMLButtonElement;
 	private queueButton!: HTMLButtonElement;
 	private stationButton!: HTMLButtonElement;
 	private favoriteButton!: HTMLButtonElement;
@@ -684,6 +685,9 @@ export class StereoView extends ItemView {
 		this.shuffleButton = this.iconButton(actions, "shuffle", "Shuffle queue", () => {
 			this.plugin.player.shuffleQueue();
 		});
+		this.repeatButton = this.iconButton(actions, "repeat", "Repeat off", () => {
+			this.plugin.player.cycleRepeat();
+		});
 		const saveButton = actions.createEl("button", {
 			cls: "stereo-button stereo-text-button clickable-icon",
 			text: "Save",
@@ -933,9 +937,14 @@ export class StereoView extends ItemView {
 			state.track?.starred ? "Remove from favorites" : "Add to favorites"
 		);
 		this.previousButton.disabled = !state.track;
-		this.nextButton.disabled =
-			!state.track || state.index + 1 >= state.queue.length;
+		this.nextButton.disabled = !this.plugin.player.canNext();
 		this.shuffleButton.disabled = state.queue.length < 2;
+		const repeatLabel = `Repeat ${state.repeat}`;
+		setIcon(this.repeatButton, state.repeat === "track" ? "repeat-1" : "repeat");
+		this.repeatButton.toggleClass("stereo-button-active", state.repeat !== "off");
+		this.repeatButton.setAttribute("aria-label", repeatLabel);
+		this.repeatButton.setAttribute("aria-pressed", String(state.repeat !== "off"));
+		this.repeatButton.setAttribute("title", repeatLabel);
 		this.stationButton.disabled = !state.track || !!state.track.streamUrl;
 		this.stationButton.toggleClass("stereo-button-active", !!state.station);
 
