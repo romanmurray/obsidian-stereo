@@ -177,7 +177,7 @@ export class StereoView extends ItemView {
 		this.buildNowPlaying(this.pages.nowPlaying);
 		this.buildQueuePage(this.pages.queue);
 		this.buildMiniPlayer(root);
-		this.library = new LibraryPane(this.plugin, this.pages.library);
+		this.library = this.addChild(new LibraryPane(this.plugin, this.pages.library));
 		this.search = new SearchPane(
 			this.plugin,
 			this.library,
@@ -229,6 +229,7 @@ export class StereoView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.removeChild(this.library);
 		this.viz.stop();
 		this.statusBarObserver?.disconnect();
 		this.statusBarObserver = null;

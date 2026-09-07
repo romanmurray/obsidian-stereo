@@ -1,5 +1,6 @@
 import { Notice, Plugin, WorkspaceLeaf, debounce } from "obsidian";
 import { PlayerSnapshot, PlayerStore } from "./player";
+import { historyConnection, type HistorySnapshot } from "./history";
 import { DEFAULT_SETTINGS, StereoSettings, StereoSettingTab } from "./settings";
 import type { StationSeed } from "./station";
 import { Song, SubsonicClient } from "./subsonic";
@@ -8,6 +9,7 @@ import { STEREO_VIEW_TYPE, StereoView } from "./view";
 interface StereoData {
 	settings: StereoSettings;
 	playerState?: PlayerSnapshot;
+	history?: HistorySnapshot;
 }
 
 export default class StereoPlugin extends Plugin {
@@ -16,9 +18,9 @@ export default class StereoPlugin extends Plugin {
 	player: PlayerStore = new PlayerStore(this.client, () => this.settings);
 
 	private playerState: PlayerSnapshot | undefined;
+	private pendingSave: Promise<void> = Promise.resolve();
 	private savePlayerState = debounce(
-		(snapshot: PlayerSnapshot) => {
-			this.playerState = snapshot;
+		() => {
 			void this.saveAll();
 		},
 		1000,
@@ -31,7 +33,11 @@ export default class StereoPlugin extends Plugin {
 		if (this.playerState) {
 			this.player.restore(this.playerState);
 		}
-		this.player.setPersistence((snapshot) => this.savePlayerState(snapshot));
+		this.player.setPersistence((snapshot) => {
+			this.playerState = snapshot;
+			this.savePlayerState();
+		});
+		this.player.history.setPersistence(() => { void this.saveAll(); });
 
 		this.registerView(STEREO_VIEW_TYPE, (leaf) => new StereoView(leaf, this));
 		this.addSettingTab(new StereoSettingTab(this.app, this));
@@ -53,6 +59,8 @@ export default class StereoPlugin extends Plugin {
 		// Per Obsidian guidelines: do not detach leaves of our view type here.
 		// Registered events/DOM listeners are cleaned up automatically.
 		this.player.destroy();
+		this.savePlayerState.cancel();
+		void this.saveAll();
 	}
 
 	/**
@@ -115,23 +123,33 @@ export default class StereoPlugin extends Plugin {
 		const raw = (await this.loadData()) as
 			| (Partial<StereoData> & Partial<StereoSettings>)
 			| null;
-		if (!raw) return;
+		if (!raw) {
+			this.player.history.restore(undefined, historyConnection(this.settings));
+			return;
+		}
 
 		// Current shape: { settings, playerState }. Legacy shape: flat settings.
 		const settings = raw.settings ?? raw;
 		this.settings = { ...DEFAULT_SETTINGS, ...settings };
 		this.playerState = raw.playerState;
+		this.player.history.restore(raw.history, historyConnection(this.settings));
 	}
 
 	async saveSettings(): Promise<void> {
+		this.player.syncConnection();
 		await this.saveAll();
 	}
 
 	private async saveAll(): Promise<void> {
 		const data: StereoData = {
-			settings: this.settings,
+			settings: { ...this.settings },
 			playerState: this.playerState,
+			history: this.player.history.getSnapshot(),
 		};
-		await this.saveData(data);
+		// Keep an earlier playback save from overwriting a later history clear.
+		this.pendingSave = this.pendingSave.then(() => this.saveData(data)).catch(() => {
+			new Notice("Could not save Stereo data.");
+		});
+		await this.pendingSave;
 	}
 }

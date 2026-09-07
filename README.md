@@ -31,6 +31,8 @@ your notes.
 - Scrobbles plays back to your server so play counts stay accurate.
 
 **Library**
+- Recently played lists the latest 200 song plays, newest first. Use the history
+  icon in Library to play a track again, add it to the queue, or clear history.
 - Browse albums, artists, playlists, and internet radio, with drill-in
   navigation (artist → album → track) and an A–Z scrubber for long lists.
 - Right-click context menus everywhere: play, play next, add to queue, go to
@@ -86,6 +88,15 @@ and search tuning.
   your vault, that file goes with it. Consider a dedicated, limited account on
   your music server.
 - No telemetry, no analytics.
+- Recently played stores track IDs, display metadata (title, artist, album,
+  artwork ID, genre, and duration), and play timestamps locally in the same
+  `data.json`, limited to 200 entries for the configured server/account. History
+  records actual song starts, including replays and repeats, and excludes radio.
+  It contains no passwords or authenticated stream/artwork URLs. Clear history
+  removes these entries without changing playback or the queue. Changing the
+  server URL or username clears history and the previous account's queue/undo.
+  There is no background history import or cloud history sync feature; vault
+  syncing can copy `data.json` along with your other vault files.
 
 ## Development
 

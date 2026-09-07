@@ -16,6 +16,7 @@ class FakeAudio extends EventTarget {
 	paused = true;
 	ended = false;
 	error = null;
+	readyState = 4;
 	assignments = 0;
 	loads = 0;
 	playError = null;
@@ -51,6 +52,191 @@ globalThis.Audio = FakeAudio;
 const song = (id) => ({ id, title: id, artistId: id, duration: 240 });
 const a = song("a"), b = song("b"), c = song("c"), d = song("d");
 const seed = { kind: "song", id: "a", label: "A station" };
+
+test("history waits for actual audio, ignoring restore, queue edits, prefetch and failed starts", async (t) => {
+	const { store, audio } = setup(t);
+	store.restore({ queue: [a, b], index: 0, position: 30, volume: 0.5 });
+	await store.addToQueue([c]);
+	store.playNext([d]);
+	assert.equal(store.history.getEntries().length, 0);
+	audio.playError = new Error("Unavailable");
+	await store.togglePlayPause();
+	assert.equal(store.history.getEntries().length, 0);
+	audio.playError = null;
+	let resolvePlay;
+	audio.playPromise = new Promise((resolve) => { resolvePlay = resolve; });
+	const pending = store.playTrack(b);
+	audio.paused = false;
+	audio.readyState = 1;
+	audio.dispatchEvent(new Event("play"));
+	audio.dispatchEvent(new Event("playing"));
+	assert.equal(store.history.getEntries().length, 0);
+	audio.readyState = 4;
+	audio.dispatchEvent(new Event("playing"));
+	resolvePlay();
+	await pending;
+	assert.deepEqual(store.history.getEntries().map((entry) => entry.song.id), ["b"]);
+});
+
+test("history does not duplicate pause/resume, seek, buffering recovery or reordering", async (t) => {
+	const { store, audio } = setup(t);
+	await store.setQueue([a, b]);
+	await store.togglePlayPause();
+	await store.togglePlayPause();
+	store.seek(40);
+	audio.dispatchEvent(new Event("playing"));
+	store.moveQueueEntry(0, 1);
+	await store.startStation(seed, a);
+	assert.equal(store.history.getEntries().length, 1);
+	await store.playTrack(a);
+	assert.equal(store.history.getEntries().length, 2);
+});
+
+test("history includes completed repeats, duplicate occurrences and replay after queue end", async (t) => {
+	for (const mode of ["off", "queue", "track"]) {
+		const { store, audio } = setup(t);
+		repeatMode(store, mode);
+		await store.setQueue([a, a]);
+		audio.finish();
+		assert.equal(store.history.getEntries().length, 2);
+		audio.finish();
+		assert.equal(store.history.getEntries().length, mode === "off" ? 2 : 3);
+		if (mode === "off") {
+			await store.togglePlayPause();
+			assert.equal(store.history.getEntries().length, 3);
+		}
+	}
+});
+
+test("history retains newest 200 plays, persists metadata only and restores without playback", async (t) => {
+	const { store } = setup(t);
+	let persisted;
+	store.history.setPersistence((snapshot) => { persisted = structuredClone(snapshot); });
+	for (let i = 0; i < 205; i++) await store.playTrack({ ...song(String(i)), artist: "Artist", coverArt: "art-id", password: "secret", url: "https://music.invalid/?token=secret" });
+	const entries = store.history.getEntries();
+	assert.equal(entries.length, 200);
+	assert.equal(entries[0].song.id, "204");
+	assert.equal(entries.at(-1).song.id, "5");
+	assert.equal(entries[0].song.coverArt, "art-id");
+	assert.equal(entries[0].song.artist, "Artist");
+	assert.ok(entries.every((entry) => Number.isFinite(entry.playedAt)));
+	assert.ok(!JSON.stringify(persisted).includes("secret"));
+	const restarted = setup(t);
+	restarted.store.history.restore(persisted, store.history.getConnection());
+	assert.deepEqual(restarted.store.history.getEntries(), entries);
+	assert.equal(restarted.audio.src, "");
+	await store.playTrack({ ...a, coverArt: "https://music.invalid/art?token=secret" });
+	assert.equal(store.history.getEntries()[0].song.coverArt, undefined);
+});
+
+test("history loading tolerates missing and invalid data, drops foreign accounts and sorts plays", (t) => {
+	const { store } = setup(t);
+	const connection = store.history.getConnection();
+	for (const raw of [undefined, null, [], "invalid", { connection, entries: false }, { connection: "foreign", entries: [{ song: a, playedAt: 1 }] }]) {
+		store.history.restore(raw, connection);
+		assert.deepEqual(store.history.getEntries(), []);
+	}
+	store.history.restore({ connection, entries: [null, {}, { song: a, playedAt: NaN }, { song: a, playedAt: Infinity }, { song: a, playedAt: 9e15 }, { song: {}, playedAt: 1 }, { song: a, playedAt: "yesterday" }, { song: a, playedAt: 1 }, { song: b, playedAt: 2 }, { song: { ...a, streamUrl: "https://radio.invalid" }, playedAt: 3 }] }, connection);
+	assert.deepEqual(store.history.getEntries().map((entry) => entry.song.id), ["b", "a"]);
+});
+
+test("clear history persists immediately and leaves playback, queue and undo alone", async (t) => {
+	const { store, audio } = setup(t);
+	await store.playTrack(b);
+	await store.playTrack(a);
+	audio.tick(35);
+	const before = store.getState();
+	let persisted;
+	store.history.setPersistence((snapshot) => { persisted = structuredClone(snapshot); });
+	store.history.clear();
+	assert.deepEqual(persisted.entries, []);
+	assert.equal(store.getState(), before);
+	await store.togglePlayPause();
+	await store.togglePlayPause();
+	store.seek(10);
+	audio.dispatchEvent(new Event("playing"));
+	assert.equal(store.history.getEntries().length, 0);
+	await store.playTrack(a);
+	assert.equal(store.history.getEntries().length, 1);
+});
+
+test("history actions append or replace with undo, and stale entries cannot play", async (t) => {
+	const { store, audio } = setup(t);
+	await store.playTrack(a);
+	const entry = store.history.getEntries()[0];
+	await store.playTrack(b);
+	await store.playHistoryEntry(entry, true);
+	assert.deepEqual(store.getState().queue, [b, a]);
+	assert.equal(store.history.getEntries().length, 2);
+	await store.playHistoryEntry(entry);
+	assert.deepEqual(store.getState().queue, [a]);
+	assert.equal(store.getState().canUndo, true);
+	await store.undoQueue();
+	assert.deepEqual(store.getState().queue, [b, a]);
+	store.history.clear();
+	const assignments = audio.assignments;
+	await store.playHistoryEntry(entry);
+	await store.playHistoryEntry(entry, true);
+	assert.equal(audio.assignments, assignments);
+	assert.deepEqual(store.getState().queue, [b, a]);
+});
+
+test("history excludes live radio and unavailable tracks while preserving previous entries", async (t) => {
+	const { store, audio } = setup(t);
+	await store.playTrack(a);
+	const entry = store.history.getEntries()[0];
+	await store.playTrack({ ...b, streamUrl: "https://radio.invalid" });
+	assert.deepEqual(store.history.getEntries(), [entry]);
+	audio.playError = new Error("Deleted track");
+	await store.playHistoryEntry(entry);
+	assert.equal(store.getState().error, "Deleted track");
+	assert.deepEqual(store.history.getEntries(), [entry]);
+});
+
+test("connection changes clear history and old queue IDs; passwords and appearance retain history", async (t) => {
+	const settings = { serverUrl: "https://one.invalid", username: "first", password: "secret" };
+	const { store, audio, client } = setup(t, settings);
+	await store.playTrack(a);
+	const entry = store.history.getEntries()[0];
+	settings.password = "changed";
+	settings.nowPlayingView = "bars";
+	store.syncConnection();
+	assert.deepEqual(store.history.getEntries(), [entry]);
+	let resolveStation;
+	client.getSimilarSongs = () => new Promise((resolve) => { resolveStation = resolve; });
+	const pending = store.startStation(seed);
+	settings.username = "second";
+	store.syncConnection();
+	assert.equal(store.history.getEntries().length, 0);
+	assert.equal(store.getState().track, null);
+	assert.equal(store.getState().canUndo, false);
+	assert.equal(audio.src, "");
+	resolveStation([b, c]);
+	assert.equal(await pending, 0);
+	await store.playHistoryEntry(entry);
+	assert.equal(audio.src, "");
+	await store.playTrack(b);
+	assert.equal(store.history.getEntries().length, 1);
+	settings.serverUrl = "https://two.invalid";
+	store.syncConnection();
+	assert.equal(store.history.getEntries().length, 0);
+});
+
+test("late playing events from the previous account never enter the new history", async (t) => {
+	const settings = { username: "first" };
+	const { store, audio } = setup(t, settings);
+	let resolvePlay;
+	audio.playPromise = new Promise((resolve) => { resolvePlay = resolve; });
+	const pending = store.playTrack(a);
+	settings.username = "second";
+	audio.paused = false;
+	audio.dispatchEvent(new Event("playing"));
+	assert.equal(store.history.getEntries().length, 0);
+	store.syncConnection();
+	resolvePlay();
+	await pending;
+	assert.equal(store.history.getEntries().length, 0);
+});
 function setup(t, settings = {}) {
 	const client = {
 		streamUrl: (id) => `https://music.invalid/${id}`,
@@ -58,7 +244,7 @@ function setup(t, settings = {}) {
 		getRandomSongs: async () => [],
 		scrobble: async () => {},
 	};
-	const store = new PlayerStore(client, () => ({ scrobbleEnabled: false, stationBatchSize: 5, ...settings }));
+	const store = new PlayerStore(client, () => ({ serverUrl: "https://music.invalid", username: "listener", scrobbleEnabled: false, stationBatchSize: 5, ...settings }));
 	const audio = FakeAudio.instances.at(-1);
 	const saved = [];
 	store.setPersistence((snapshot) => saved.push(structuredClone(snapshot)));

@@ -1,4 +1,5 @@
-import { Menu, Notice, requestUrl, setIcon } from "obsidian";
+import { Component, Menu, Notice, requestUrl, setIcon } from "obsidian";
+import type { HistoryEntry } from "./history";
 import {
 	ConfirmModal,
 	PlaylistNameModal,
@@ -23,7 +24,8 @@ type Page =
 	| { kind: "artist"; id: string; name: string }
 	| { kind: "album"; id: string; name: string }
 	| { kind: "playlist"; id: string; name: string }
-	| { kind: "favorites" };
+	| { kind: "favorites" }
+	| { kind: "history" };
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
 	{ id: "albums", label: "Albums" },
@@ -40,7 +42,9 @@ const ALBUM_PAGE_SIZE = 100;
  * left-clicking an artist/album/playlist navigates into it; playback is
  * always explicit (play button, track click per setting, or context menu).
  */
-export class LibraryPane {
+export class LibraryPane extends Component {
+	private historyButton: HTMLButtonElement;
+	private renderedHistory: readonly HistoryEntry[] = [];
 	private plugin: StereoPlugin;
 	private subTabButtons = {} as Record<SubTab, HTMLButtonElement>;
 	/** "+" in the sub-tab bar; only shown on the Radio sub-tab. */
@@ -64,6 +68,7 @@ export class LibraryPane {
 	private stations: RadioStation[] | null = null;
 
 	constructor(plugin: StereoPlugin, containerEl: HTMLElement) {
+		super();
 		this.plugin = plugin;
 
 		// The sub-tab bar stays put; only the content below it scrolls.
@@ -86,6 +91,14 @@ export class LibraryPane {
 		this.favoritesButton.addEventListener("click", () => {
 			this.openFavorites();
 		});
+		this.historyButton = subTabBar.createEl("button", {
+			cls: "stereo-button clickable-icon",
+			attr: { "aria-label": "Recently played", title: "Recently played" },
+		});
+		setIcon(this.historyButton, "history");
+		this.registerDomEvent(this.historyButton, "click", () => {
+			if (this.stack[this.stack.length - 1]?.kind !== "history") this.push({ kind: "history" });
+		});
 		this.addStationButton = subTabBar.createEl("button", {
 			cls: "stereo-button clickable-icon stereo-subtab-refresh",
 			attr: { "aria-label": "Add radio station" },
@@ -106,6 +119,41 @@ export class LibraryPane {
 		// The body hosts the scrolling content plus the (non-scrolling) scrub rail.
 		this.bodyEl = containerEl.createDiv({ cls: "stereo-library-body" });
 		this.contentEl = this.bodyEl.createDiv({ cls: "stereo-library-content" });
+		this.register(this.plugin.player.history.subscribe(() => {
+			if (this.stack[this.stack.length - 1]?.kind === "history") {
+				const scroll = this.contentEl.scrollTop;
+				this.render();
+				this.contentEl.scrollTop = scroll;
+			}
+		}));
+		let previousError: string | null = null;
+		this.register(this.plugin.player.subscribe((state) => {
+			if (state.error === previousError) return;
+			previousError = state.error;
+			if (this.stack[this.stack.length - 1]?.kind === "history") this.render();
+		}));
+		this.registerDomEvent(this.contentEl, "click", (event) => {
+			const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-history-action]");
+			if (!button) return;
+			if (button.dataset.historyAction === "clear") { this.plugin.player.history.clear(); return; }
+			const entry = this.renderedHistory[Number(button.dataset.historyIndex)];
+			if (entry) void this.plugin.player.playHistoryEntry(entry, button.dataset.historyAction === "append");
+		});
+		this.registerDomEvent(this.contentEl, "contextmenu", (event) => {
+			const row = (event.target as HTMLElement).closest<HTMLElement>(".stereo-history-row");
+			if (!row) return;
+			event.preventDefault();
+			const entry = this.renderedHistory[Number(row.dataset.historyIndex)];
+			if (!entry) return;
+			const menu = new Menu();
+			menu.addItem((item) => item.setTitle("Play again").setIcon("play").onClick(() => { void this.plugin.player.playHistoryEntry(entry); }));
+			menu.addItem((item) => item.setTitle("Add to queue").setIcon("list-plus").onClick(() => { void this.plugin.player.playHistoryEntry(entry, true); }));
+			menu.showAtMouseEvent(event);
+		});
+		this.registerDomEvent(this.contentEl, "error", (event) => {
+			const target = event.target as HTMLElement;
+			if (target.matches(".stereo-history-cover img")) target.remove();
+		}, true);
 		this.render();
 	}
 
@@ -194,6 +242,8 @@ export class LibraryPane {
 			"stereo-button-active",
 			page.kind === "favorites"
 		);
+		this.historyButton.toggleClass("stereo-button-active", page.kind === "history");
+		this.historyButton.setAttribute("aria-pressed", String(page.kind === "history"));
 		if (page.kind !== "root") this.buildBackRow(this.pageTitle(page));
 
 		switch (page.kind) {
@@ -212,6 +262,9 @@ export class LibraryPane {
 			case "favorites":
 				void this.renderFavoritesPage();
 				break;
+			case "history":
+				this.renderHistoryPage();
+				break;
 		}
 	}
 
@@ -229,7 +282,49 @@ export class LibraryPane {
 	private pageTitle(page: Page): string {
 		if (page.kind === "root") return "";
 		if (page.kind === "favorites") return "Favorites";
+		if (page.kind === "history") return "Recently played";
 		return page.name;
+	}
+
+	private renderHistoryPage(): void {
+		this.renderedHistory = this.plugin.player.history.getEntries();
+		const clear = this.contentEl.createEl("button", {
+			text: "Clear history", cls: "stereo-history-clear",
+			attr: { "data-history-action": "clear" },
+		});
+		clear.disabled = this.renderedHistory.length === 0;
+		const error = this.plugin.player.getState().error;
+		if (error) this.contentEl.createDiv({ cls: "stereo-error stereo-error-visible", text: error, attr: { role: "alert" } });
+		if (this.renderedHistory.length === 0) {
+			this.emptyStatus("No recently played tracks. Songs appear here when playback starts.");
+			return;
+		}
+		this.renderedHistory.forEach((entry, index) => {
+			const { song, playedAt } = entry;
+			const row = this.contentEl.createDiv({ cls: "stereo-list-row stereo-history-row", attr: { "data-history-index": String(index) } });
+			const cover = row.createDiv({ cls: "stereo-history-cover" });
+			setIcon(cover, "music");
+			if (song.coverArt) {
+				try {
+					cover.createEl("img", { attr: { src: this.plugin.client.coverArtUrl(song.coverArt, 100), alt: "", loading: "lazy" } });
+				} catch { /* The music placeholder remains when connection settings are incomplete. */ }
+			}
+			const meta = row.createDiv({ cls: "stereo-list-row-meta" });
+			meta.createDiv({ cls: "stereo-list-row-title", text: song.title });
+			meta.createDiv({ cls: "stereo-list-row-sub", text: song.artist ?? "Unknown artist" });
+			const date = new Date(playedAt);
+			meta.createEl("time", {
+				cls: "stereo-list-row-sub", text: date.toLocaleString(),
+				attr: { datetime: date.toISOString() },
+			});
+			for (const [action, label, icon] of [["play", "Play again", "play"], ["append", "Add to queue", "list-plus"]]) {
+				const button = row.createEl("button", {
+					cls: "stereo-button clickable-icon",
+					attr: { "data-history-action": action!, "data-history-index": String(index), "aria-label": `${label}: ${song.title}`, title: label! },
+				});
+				setIcon(button, icon!);
+			}
+		});
 	}
 
 	private buildBackRow(title: string): void {
@@ -263,7 +358,7 @@ export class LibraryPane {
 	}
 
 	/** Run a loader with loading/error affordances; returns null when stale. */
-	private async load<T>(fetcher: () => Promise<T>): Promise<T | null> {
+	private async loadPage<T>(fetcher: () => Promise<T>): Promise<T | null> {
 		const token = this.loadToken;
 		const loadingEl = this.contentEl.createDiv({
 			cls: "stereo-library-status",
@@ -291,7 +386,7 @@ export class LibraryPane {
 
 	private async renderAlbumsRoot(): Promise<void> {
 		if (!this.albums) {
-			const page = await this.load(() =>
+			const page = await this.loadPage(() =>
 				this.plugin.client.getAlbumList2("alphabeticalByName", ALBUM_PAGE_SIZE, 0)
 			);
 			if (!page) return;
@@ -335,7 +430,7 @@ export class LibraryPane {
 
 	private async renderArtistsRoot(): Promise<void> {
 		if (!this.artistIndexes) {
-			const indexes = await this.load(() => this.plugin.client.getArtists());
+			const indexes = await this.loadPage(() => this.plugin.client.getArtists());
 			if (!indexes) return;
 			this.artistIndexes = indexes;
 		}
@@ -427,7 +522,7 @@ export class LibraryPane {
 
 	private async renderPlaylistsRoot(): Promise<void> {
 		if (!this.playlists) {
-			const playlists = await this.load(() => this.plugin.client.getPlaylists());
+			const playlists = await this.loadPage(() => this.plugin.client.getPlaylists());
 			if (!playlists) return;
 			this.playlists = playlists;
 		}
@@ -441,7 +536,7 @@ export class LibraryPane {
 
 	private async renderRadioRoot(): Promise<void> {
 		if (!this.stations) {
-			const stations = await this.load(() =>
+			const stations = await this.loadPage(() =>
 				this.plugin.client.getInternetRadioStations()
 			);
 			if (!stations) return;
@@ -457,7 +552,7 @@ export class LibraryPane {
 
 	/** All favorites on one page: artists, then albums, then tracks. */
 	private async renderFavoritesPage(): Promise<void> {
-		const result = await this.load(() => this.plugin.client.getStarred2());
+		const result = await this.loadPage(() => this.plugin.client.getStarred2());
 		if (!result) return;
 		const { artists, albums, songs } = result;
 
@@ -493,7 +588,7 @@ export class LibraryPane {
 	// --- detail pages ---
 
 	private async renderArtistPage(id: string): Promise<void> {
-		const result = await this.load(() => this.plugin.client.getArtist(id));
+		const result = await this.loadPage(() => this.plugin.client.getArtist(id));
 		if (!result) return;
 
 		const header = this.contentEl.createDiv({ cls: "stereo-detail-header" });
@@ -514,7 +609,7 @@ export class LibraryPane {
 	}
 
 	private async renderAlbumPage(id: string): Promise<void> {
-		const result = await this.load(() => this.plugin.client.getAlbum(id));
+		const result = await this.loadPage(() => this.plugin.client.getAlbum(id));
 		if (!result) return;
 		const { album, songs } = result;
 
@@ -566,7 +661,7 @@ export class LibraryPane {
 	}
 
 	private async renderPlaylistPage(id: string): Promise<void> {
-		const result = await this.load(() => this.plugin.client.getPlaylist(id));
+		const result = await this.loadPage(() => this.plugin.client.getPlaylist(id));
 		if (!result) return;
 		const { playlist, songs } = result;
 

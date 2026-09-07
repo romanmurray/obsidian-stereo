@@ -1,0 +1,57 @@
+(async () => {
+	const p = app.plugins.plugins.stereo;
+	if (!window.stereoHistoryBackup) throw new Error("Original data backup missing");
+	const check = (condition, message) => { if (!condition) throw new Error(message); };
+	const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+	const waitFor = async (predicate) => {
+		for (let i = 0; i < 200; i++) { if (predicate()) return; await pause(100); }
+		throw new Error("Timed out");
+	};
+	check(p.player.history.getEntries().length === 4 && !p.player.getState().playing, "Restart did not restore paused history");
+	let view = app.workspace.getLeavesOfType("stereo-player")[0].view;
+	const listeners = p.player.history.listeners.size;
+	view.leaf.detach();
+	await p.activateView();
+	view = app.workspace.getLeavesOfType("stereo-player")[0].view;
+	view.setActiveTab("library");
+	view.contentEl.querySelector('[aria-label="Recently played"]').click();
+	check(p.player.history.listeners.size === listeners, "Sidebar leaked a history subscription");
+	check(view.contentEl.querySelectorAll(".stereo-history-row").length === 4, "Sidebar lost history");
+	const img = view.contentEl.querySelector(".stereo-history-cover img");
+	img?.dispatchEvent(new Event("error"));
+	check(!img || !img.isConnected, "Failed artwork did not fall back");
+	await p.player.togglePlayPause();
+	await waitFor(() => p.player.history.getEntries().length === 5);
+	view.contentEl.querySelector('[data-history-action="clear"]').click();
+	check(p.player.getState().playing, "Clear interrupted playback");
+	await p.player.togglePlayPause();
+	await p.player.togglePlayPause();
+	await pause(300);
+	check(p.player.history.getEntries().length === 0, "Clear followed by resume recreated history");
+	await p.pendingSave;
+	check((await p.loadData()).history.entries.length === 0, "Clear did not persist");
+	await p.player.playTrack(window.stereoHistorySongs[1]);
+	await waitFor(() => p.player.history.getEntries().length === 1);
+	const oldEntry = p.player.history.getEntries()[0];
+	const originalUsername = p.settings.username;
+	p.settings.username = originalUsername + "-history-check";
+	await p.saveSettings();
+	check(p.player.history.getEntries().length === 0 && p.player.getState().queue.length === 0, "Account change kept old IDs");
+	await p.player.playHistoryEntry(oldEntry);
+	check(p.player.getState().track === null, "Stale history action played after account switch");
+	p.settings.username = originalUsername;
+	await p.saveSettings();
+	const originalUrl = p.settings.serverUrl;
+	p.settings.serverUrl = originalUrl + "/history-check";
+	await p.saveSettings();
+	check(p.player.history.getEntries().length === 0, "Server change kept history");
+	p.settings.serverUrl = originalUrl;
+	await p.saveSettings();
+	p.player.history.restore({ connection: p.player.history.getConnection(), entries: [{ song: { id: "stereo-unavailable-history-check", title: "Unavailable test track" }, playedAt: Date.now() }] }, p.player.history.getConnection());
+	view.library.render();
+	view.contentEl.querySelector('[data-history-action="play"]').click();
+	await waitFor(() => !!p.player.getState().error);
+	check(p.player.history.getEntries().length === 1, "Failed history play changed the list");
+	check(view.contentEl.querySelector(".stereo-error-visible")?.textContent, "History playback error was not shown");
+	return JSON.stringify({ passed: ["restart paused", "sidebar reopen and cleanup", "artwork fallback", "clear while playing", "resume after clear", "persisted clear", "account change", "server change", "stale action", "unavailable track error"] });
+})()

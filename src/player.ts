@@ -1,4 +1,5 @@
 import type { StereoSettings } from "./settings";
+import { HistoryStore, historyConnection, type HistoryEntry } from "./history";
 import { buildStationBatch, type StationSeed } from "./station";
 import type { Song, SubsonicClient } from "./subsonic";
 
@@ -62,6 +63,9 @@ const SCROBBLE_AFTER_SECONDS = 240;
  * they never touch the audio element directly (AGENTS.md).
  */
 export class PlayerStore {
+	readonly history = new HistoryStore();
+	private historyRecorded = false;
+	private loadedConnection = "";
 	private client: SubsonicClient;
 	private getSettings: () => StereoSettings;
 	private audio: HTMLAudioElement;
@@ -102,6 +106,7 @@ export class PlayerStore {
 	constructor(client: SubsonicClient, getSettings: () => StereoSettings) {
 		this.client = client;
 		this.getSettings = getSettings;
+		this.history.restore(undefined, historyConnection(getSettings()));
 		this.audio = new Audio();
 		this.audio.preload = "auto";
 		this.audio.volume = this.state.volume;
@@ -127,6 +132,22 @@ export class PlayerStore {
 
 	getState(): Readonly<PlayerState> {
 		return this.state;
+	}
+
+	/** Discard IDs and pending playback from the previous server/account. */
+	syncConnection(): void {
+		if (!this.history.changeConnection(historyConnection(this.getSettings()))) return;
+		this.historyRecorded = true;
+		this.invalidateUndo();
+		this.emptyQueue();
+	}
+
+	async playHistoryEntry(entry: HistoryEntry, append = false): Promise<void> {
+		this.syncConnection();
+		// Also rejects a stale menu opened before clear or a connection change.
+		if (!this.history.getEntries().includes(entry)) return;
+		if (append) await this.addToQueue([entry.song]);
+		else await this.playTrack(entry.song);
 	}
 
 	/** The plugin registers a (debounced) writer for restart persistence. */
@@ -424,6 +445,7 @@ export class PlayerStore {
 	 * Throws on server failure.
 	 */
 	async startStation(seed: StationSeed, lead?: Song): Promise<number> {
+		const connection = historyConnection(this.getSettings());
 		const exclude = new Set(lead ? [lead.id] : []);
 		// The lead counts as already played, so the batch opens with someone else.
 		const batch = await buildStationBatch(
@@ -433,7 +455,7 @@ export class PlayerStore {
 			lead ? [lead] : [],
 			this.getSettings().stationBatchSize
 		);
-		if (batch.length === 0) return 0;
+		if (batch.length === 0 || connection !== historyConnection(this.getSettings())) return 0;
 		const queue = lead ? [lead, ...batch] : batch;
 		this.captureUndo();
 
@@ -504,6 +526,10 @@ export class PlayerStore {
 			return;
 		}
 		if (this.audio.paused) {
+			if (this.audio.ended) {
+				await this.loadCurrent(true);
+				return;
+			}
 			await this.tryPlay();
 		} else {
 			this.audio.pause();
@@ -705,6 +731,7 @@ export class PlayerStore {
 		this.audio.load();
 		this.dropPrefetch();
 		this.listeners.clear();
+		this.history.destroy();
 		this.persist = null;
 		this.captureSource?.disconnect();
 		this.captureSource = null;
@@ -721,6 +748,8 @@ export class PlayerStore {
 		const track = this.state.queue[this.state.index] ?? null;
 		if (!track) return;
 		const version = ++this.loadVersion;
+		this.historyRecorded = false;
+		this.loadedConnection = historyConnection(this.getSettings());
 		this.audio.pause();
 		this.pendingSeek = startAt ?? null;
 		this.update({
@@ -832,6 +861,12 @@ export class PlayerStore {
 	 * already-playing track. Never touches playback itself.
 	 */
 	private onPlaying = (): void => {
+		if (!this.historyRecorded && this.state.track && this.audio.src && !this.audio.paused && !this.audio.error && this.audio.readyState >= 2) {
+			this.historyRecorded = true;
+			if (this.loadedConnection === historyConnection(this.getSettings())) {
+				this.history.record(this.state.track, this.loadedConnection);
+			}
+		}
 		if (!this.audioContext) return;
 		this.rewireCapture();
 		void this.audioContext.resume().catch(() => {});

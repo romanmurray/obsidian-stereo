@@ -18,7 +18,7 @@ shuffle; snapshot migration; queue undo and station interaction; per-play
 scrobbling; rapid skips, stale completion events and failed playback; and radio
 handling. A radio entry that ends advances to the entry after it (wrapping under
 repeat queue), but never restarts itself through repeat track, a wrap or
-duplicate entry carrying the same stream URL, or an error. The suite has 40 tests, including the existing queue regressions.
+duplicate entry carrying the same stream URL, or an error.
 
 Live verification for issue #1 (2026-09-05, Obsidian with Navidrome):
 
@@ -75,3 +75,49 @@ Repeat self-review: state and audio ownership remain in the store; UI calls stor
 actions, uses DOM helpers and registered listeners, and reuses theme styling.
 Repeat adds one optional local snapshot field, no runtime dependency or settings
 page control, and does not become part of queue undo.
+
+Recently played coverage brings the suite to 54 tests. It checks actual audio
+starts versus play requests, resume/seek/buffering deduplication, repeat and
+explicit replay, retention of 200 play events, metadata sanitization, invalid
+saved data, account separation, clear during playback, unavailable tracks,
+radio exclusion, stale history actions, and queue undo. The plugin persistence
+tests exercise legacy loading, saved queue/history consistency, overlapping
+writes followed by clearing, connection changes, and flushing on unload.
+
+Live verification for issue #3 (2026-09-07, Obsidian with Navidrome):
+
+- Actual song starts, pause/resume, seeking, explicit duplicate playback, and
+  natural repeat-track completion produced the expected history entries.
+- Library's history button, row playback, append, queue undo capture, and live
+  list updates worked. Populated and empty screenshots were visually checked.
+- Plugin reload restored four entries without starting playback or adding a
+  new entry. Closing/reopening the sidebar preserved entries and did not leak
+  a history subscription.
+- Clearing while playing immediately emptied the UI and saved history without
+  interrupting audio. Resume after clear did not recreate the current entry.
+- Changing username or server URL cleared history and old queue/undo IDs.
+  A stale history action could not play after switching accounts.
+- A missing song displayed the normal playback error and kept the history list
+  intact. A simulated artwork error removed the image, exposing the placeholder.
+- No Stereo console errors were captured. The vault repeatedly reported an
+  unrelated `folder-graph-view` exception accessing `originalSetData` during
+  leaf/reload operations, so the whole-vault error log was not clean.
+- Scrobbling was disabled and playback muted during tests. Original settings
+  and queue data were restored and checked against the saved backup; playback
+  was left paused. No playlists or other server content were edited.
+- Retention, corrupted persistence, radio exclusion and save ordering were
+  checked with automated doubles; the 200-play limit was not exercised by
+  streaming 200 live songs. Restart checks used plugin reload, not an OS restart.
+
+The optional `history-live.cjs` and `history-live-followup.cjs` scripts are for
+the Obsidian CLI, not `npm test`. They require the original plugin data saved in
+`window.stereoHistoryBackup` before execution. Run the first script, reload the
+plugin, then run the followup. They modify local playback/settings and must be
+followed by restoring that backup. Never print the backup: it contains server
+credentials. Tests use private view/store access only inside the dev harness.
+
+History self-review: playback ownership stays in the store; new UI uses DOM
+helpers, registered events/subscriptions, accessible labels, and theme variables.
+History adds no runtime dependencies, endpoints, settings controls or server
+writes. Local storage and clearing behavior are documented in README. Existing
+lyrics/radio networking and the rest of the plugin are unchanged by this slice.
