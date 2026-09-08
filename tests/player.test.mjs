@@ -112,13 +112,15 @@ test("history retains newest 200 plays, persists metadata only and restores with
 	const { store } = setup(t);
 	let persisted;
 	store.history.setPersistence((snapshot) => { persisted = structuredClone(snapshot); });
-	for (let i = 0; i < 205; i++) await store.playTrack({ ...song(String(i)), artist: "Artist", coverArt: "art-id", password: "secret", url: "https://music.invalid/?token=secret" });
+	for (let i = 0; i < 205; i++) await store.playTrack({ ...song(String(i)), artist: "Artist", coverArt: "art-id", starred: "2026-09-01T00:00:00Z", password: "secret", url: "https://music.invalid/?token=secret" });
 	const entries = store.history.getEntries();
 	assert.equal(entries.length, 200);
 	assert.equal(entries[0].song.id, "204");
 	assert.equal(entries.at(-1).song.id, "5");
 	assert.equal(entries[0].song.coverArt, "art-id");
 	assert.equal(entries[0].song.artist, "Artist");
+	assert.equal(entries[0].song.starred, "2026-09-01T00:00:00Z");
+	assert.equal(entries[0].song.password, undefined);
 	assert.ok(entries.every((entry) => Number.isFinite(entry.playedAt)));
 	assert.ok(!JSON.stringify(persisted).includes("secret"));
 	const restarted = setup(t);
@@ -127,6 +129,8 @@ test("history retains newest 200 plays, persists metadata only and restores with
 	assert.equal(restarted.audio.src, "");
 	await store.playTrack({ ...a, coverArt: "https://music.invalid/art?token=secret" });
 	assert.equal(store.history.getEntries()[0].song.coverArt, undefined);
+	await store.playHistoryEntry(entries[0]);
+	assert.equal(store.getState().track.starred, "2026-09-01T00:00:00Z");
 });
 
 test("history loading tolerates missing and invalid data, drops foreign accounts and sorts plays", (t) => {

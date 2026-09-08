@@ -22,7 +22,8 @@ function metadata(raw: unknown): Song | null {
 	const value = raw as Record<string, unknown>;
 	if (typeof value.id !== "string" || !value.id || typeof value.title !== "string" || value.streamUrl) return null;
 	const song: Song = { id: value.id, title: value.title };
-	for (const key of ["artist", "artistId", "album", "albumId", "genre", "coverArt"] as const) {
+	// `starred` is the favorite timestamp, so replaying keeps the favorite state.
+	for (const key of ["artist", "artistId", "album", "albumId", "genre", "coverArt", "starred"] as const) {
 		const field = value[key];
 		// Artwork is a server ID, never a persisted authenticated URL.
 		if (typeof field === "string" && (key !== "coverArt" || !/[:/?#]/.test(field))) song[key] = field;

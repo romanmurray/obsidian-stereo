@@ -80,9 +80,11 @@ Recently played coverage brings the suite to 54 tests. It checks actual audio
 starts versus play requests, resume/seek/buffering deduplication, repeat and
 explicit replay, retention of 200 play events, metadata sanitization, invalid
 saved data, account separation, clear during playback, unavailable tracks,
-radio exclusion, stale history actions, and queue undo. The plugin persistence
-tests exercise legacy loading, saved queue/history consistency, overlapping
-writes followed by clearing, connection changes, and flushing on unload.
+radio exclusion, stale history actions, favorite state on replay, and queue
+undo. The plugin persistence tests exercise legacy loading, saved queue/history
+consistency, overlapping writes followed by clearing, connection edits that are
+corrected before commit versus committed on leaving the field, and flushing on
+unload.
 
 Live verification for issue #3 (2026-09-07, Obsidian with Navidrome):
 

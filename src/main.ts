@@ -136,6 +136,15 @@ export default class StereoPlugin extends Plugin {
 	}
 
 	async saveSettings(): Promise<void> {
+		await this.saveAll();
+	}
+
+	/**
+	 * Apply a finished server URL or username edit: drop the previous account's
+	 * history, queue and undo. Called when the field is left, not per keystroke,
+	 * so correcting a typo does not throw the current session away.
+	 */
+	async commitConnection(): Promise<void> {
 		this.player.syncConnection();
 		await this.saveAll();
 	}

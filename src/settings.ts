@@ -169,16 +169,13 @@ export class StereoSettingTab extends PluginSettingTab {
 					{
 						name: "Server URL",
 						desc: "Address of your Navidrome or Subsonic-compatible server.",
-						control: {
-							type: "text",
-							key: "serverUrl",
-							placeholder: "https://music.example.com",
-						},
+						render: (setting) =>
+							this.renderConnectionField(setting, "serverUrl", "https://music.example.com"),
 					},
 					{
 						name: "Username",
 						desc: "The account used to sign in.",
-						control: { type: "text", key: "username" },
+						render: (setting) => this.renderConnectionField(setting, "username"),
 					},
 					{
 						name: "Password",
@@ -364,11 +361,9 @@ export class StereoSettingTab extends PluginSettingTab {
 	}
 
 	async setControlValue(key: string, value: unknown): Promise<void> {
-		if (key === "serverUrl" || key === "username") value = String(value).trim();
 		if (key === "searchDebounceMs") value = Number(value);
 		(this.plugin.settings as unknown as Record<string, unknown>)[key] = value;
 		await this.plugin.saveSettings();
-		if (key === "serverUrl" || key === "username") this.queueAutoTest();
 		if (VIEW_REFRESH_KEYS.has(key)) this.plugin.refreshNowPlayingViews();
 		if (key === "lyricsAlign") this.applyLyricsPreview?.();
 	}
@@ -378,10 +373,34 @@ export class StereoSettingTab extends PluginSettingTab {
 			window.clearTimeout(this.autoTestTimer);
 			this.autoTestTimer = null;
 		}
+		// Closing settings with a connection field still focused ends the edit too.
+		void this.plugin.commitConnection();
 	}
 
 	// ------------------------------------------------------------------
 	// Connection
+
+	/** Server URL and username save as typed, but the account switch (which
+	 * clears the old account's history and queue) waits until the field is left. */
+	private renderConnectionField(
+		setting: Setting,
+		key: "serverUrl" | "username",
+		placeholder = ""
+	): void {
+		setting.addText((text) => {
+			text
+				.setPlaceholder(placeholder)
+				.setValue(this.plugin.settings[key])
+				.onChange(async (value) => {
+					this.plugin.settings[key] = value.trim();
+					await this.plugin.saveSettings();
+					this.queueAutoTest();
+				});
+			text.inputEl.addEventListener("blur", () => {
+				void this.plugin.commitConnection();
+			});
+		});
+	}
 
 	/** Masked text field with an eye toggle; the declarative controls have no
 	 * password type, so this row stays imperative. */

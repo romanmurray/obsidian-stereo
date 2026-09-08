@@ -119,18 +119,12 @@ export class LibraryPane extends Component {
 		// The body hosts the scrolling content plus the (non-scrolling) scrub rail.
 		this.bodyEl = containerEl.createDiv({ cls: "stereo-library-body" });
 		this.contentEl = this.bodyEl.createDiv({ cls: "stereo-library-content" });
-		this.register(this.plugin.player.history.subscribe(() => {
-			if (this.stack[this.stack.length - 1]?.kind === "history") {
-				const scroll = this.contentEl.scrollTop;
-				this.render();
-				this.contentEl.scrollTop = scroll;
-			}
-		}));
+		this.register(this.plugin.player.history.subscribe(() => this.refreshHistoryPage()));
 		let previousError: string | null = null;
 		this.register(this.plugin.player.subscribe((state) => {
 			if (state.error === previousError) return;
 			previousError = state.error;
-			if (this.stack[this.stack.length - 1]?.kind === "history") this.render();
+			this.refreshHistoryPage();
 		}));
 		this.registerDomEvent(this.contentEl, "click", (event) => {
 			const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-history-action]");
@@ -284,6 +278,14 @@ export class LibraryPane extends Component {
 		if (page.kind === "favorites") return "Favorites";
 		if (page.kind === "history") return "Recently played";
 		return page.name;
+	}
+
+	/** Re-render the history page in place, keeping the scroll position. */
+	private refreshHistoryPage(): void {
+		if (this.stack[this.stack.length - 1]?.kind !== "history") return;
+		const scroll = this.contentEl.scrollTop;
+		this.render();
+		this.contentEl.scrollTop = scroll;
 	}
 
 	private renderHistoryPage(): void {

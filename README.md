@@ -89,12 +89,13 @@ and search tuning.
   your music server.
 - No telemetry, no analytics.
 - Recently played stores track IDs, display metadata (title, artist, album,
-  artwork ID, genre, and duration), and play timestamps locally in the same
-  `data.json`, limited to 200 entries for the configured server/account. History
-  records actual song starts, including replays and repeats, and excludes radio.
-  It contains no passwords or authenticated stream/artwork URLs. Clear history
-  removes these entries without changing playback or the queue. Changing the
-  server URL or username clears history and the previous account's queue/undo.
+  artwork ID, genre, duration, and favorite status), and play timestamps locally
+  in the same `data.json`, limited to 200 entries for the configured
+  server/account. History records actual song starts, including replays and
+  repeats, and excludes radio. It contains no passwords or authenticated
+  stream/artwork URLs. Clear history removes these entries without changing
+  playback or the queue. Changing the server URL or username clears history and
+  the previous account's queue/undo once you leave the field.
   There is no background history import or cloud history sync feature; vault
   syncing can copy `data.json` along with your other vault files.
 

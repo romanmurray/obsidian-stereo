@@ -80,17 +80,32 @@ test("pending writes cannot overwrite a later clear; clearing is saved without w
 	assert.deepEqual(completed.at(-1).history.entries, []);
 });
 
-test("saving connection changes clears persisted history and old IDs while other settings retain them", async (t) => {
+test("connection edits keep history and queue until committed; other settings never clear them", async (t) => {
 	const plugin = await setup(t, { settings });
 	await plugin.player.playTrack(song);
+	await plugin.player.playTrack(song);
+	assert.equal(plugin.player.getState().canUndo, true);
 	plugin.settings.password = "replacement";
 	await plugin.saveSettings();
-	assert.equal(plugin.writes.at(-1).history.entries.length, 1);
+	assert.equal(plugin.writes.at(-1).history.entries.length, 2);
+	// Typing through a wrong value and correcting it before leaving the field.
+	plugin.settings.username = "listene";
+	await plugin.saveSettings();
+	plugin.settings.username = "listener";
+	await plugin.saveSettings();
+	await plugin.commitConnection();
+	assert.equal(plugin.player.history.getEntries().length, 2);
+	assert.deepEqual(plugin.player.getState().queue, [song]);
+	assert.equal(plugin.player.getState().canUndo, true);
 	plugin.settings.username = "someone-else";
 	await plugin.saveSettings();
+	assert.equal(plugin.writes.at(-1).history.entries.length, 2);
+	assert.deepEqual(plugin.writes.at(-1).playerState.queue, [song]);
+	await plugin.commitConnection();
 	const saved = plugin.writes.at(-1);
 	assert.deepEqual(saved.history.entries, []);
 	assert.deepEqual(saved.playerState.queue, []);
+	assert.equal(plugin.player.getState().canUndo, false);
 	assert.equal(saved.settings.username, "someone-else");
 });
 
