@@ -132,6 +132,8 @@ Joint review follow-up (2026-09-07, Obsidian with Navidrome, no audio started):
 - Typing a wrong username and correcting it before leaving the field kept the
   queue, history and undo. Leaving the field with a changed value, or closing
   settings with the field still focused, cleared them and rejected old IDs.
+- Reloading the plugin with an uncommitted username edit saved alongside the
+  live queue restored an empty queue and history under the edited account.
 - Original plugin data was restored from an in-memory backup and verified
   after reload. Restore the in-memory state before reloading: the unload flush
   writes live state over a `saveData` call made just before it. The error
