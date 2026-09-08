@@ -123,3 +123,16 @@ helpers, registered events/subscriptions, accessible labels, and theme variables
 History adds no runtime dependencies, endpoints, settings controls or server
 writes. Local storage and clearing behavior are documented in README. Existing
 lyrics/radio networking and the rest of the plugin are unchanged by this slice.
+
+Joint review follow-up (2026-09-07, Obsidian with Navidrome, no audio started):
+
+- Save as playlist from a reordered queue created a server playlist whose
+  track order matched the queue; the test playlist was deleted afterwards.
+- Typing a wrong username and correcting it before leaving the field kept the
+  queue, history and undo. Leaving the field with a changed value, or closing
+  settings with the field still focused, cleared them and rejected old IDs.
+- Original plugin data was restored from an in-memory backup and verified
+  after reload. Restore the in-memory state before reloading: the unload flush
+  writes live state over a `saveData` call made just before it. The error
+  capture held no Stereo entries, only the unrelated `folder-graph-view`
+  exception noted above.
