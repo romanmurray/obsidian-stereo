@@ -359,14 +359,18 @@ export class PlayerStore {
 		this.persistNow();
 	}
 
-	/** Automatic completion honors repeat track; explicit next skips it. */
+	/**
+	 * Automatic completion honors repeat track; explicit next skips it. Live
+	 * radio still advances to whatever follows it, but never restarts itself:
+	 * no repeat track, and no wrap that would land on the same stream.
+	 */
 	private nextIndex(automatic: boolean): number {
 		const { queue, index, track, repeat } = this.state;
 		if (!track || index < 0 || queue.length === 0) return -1;
-		if (automatic && track.streamUrl) return -1;
-		if (automatic && repeat === "track") return index;
-		if (index + 1 < queue.length) return index + 1;
-		return repeat === "queue" && !track.streamUrl ? 0 : -1;
+		const radio = !!track.streamUrl;
+		if (automatic && repeat === "track" && !radio) return index;
+		const next = index + 1 < queue.length ? index + 1 : repeat === "queue" ? 0 : -1;
+		return radio && next === index ? -1 : next;
 	}
 
 	canNext(): boolean {

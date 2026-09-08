@@ -416,26 +416,36 @@ for (const mode of ["off", "queue", "track"]) {
 		assert.equal(store.getState().index, 0);
 	});
 
-	test(`${mode}: radio completion and error never reconnect, and subsequent songs retain repeat`, async (t) => {
+	test(`${mode}: radio advances to the next entry but never reconnects to itself, and subsequent songs retain repeat`, async (t) => {
 		const { store, audio } = setup(t);
 		repeatMode(store, mode);
 		const radio = { id: "radio", title: "Radio", streamUrl: "https://radio.invalid/live" };
 		await store.setQueue([radio, a]);
 		const assignments = audio.assignments;
 		audio.finish();
-		assert.equal(audio.assignments, assignments);
-		assert.equal(store.getState().index, 0);
-		assert.equal(store.getState().playing, false);
-		await store.next();
+		assert.equal(audio.assignments, assignments + 1);
 		assert.equal(store.getState().track, a);
 		assert.equal(store.getState().repeat, mode);
+		await store.setQueue([a, radio], 1);
+		const tail = audio.assignments;
+		audio.finish();
+		if (mode === "queue") {
+			assert.equal(audio.assignments, tail + 1);
+			assert.equal(store.getState().track, a);
+		} else {
+			assert.equal(audio.assignments, tail);
+			assert.equal(store.getState().playing, false);
+		}
 		await store.playTrack(radio);
 		assert.equal(store.canNext(), false);
+		const single = audio.assignments;
+		audio.finish();
+		assert.equal(audio.assignments, single);
+		assert.equal(store.getState().playing, false);
 		audio.dispatchEvent(new Event("error"));
-		const failedAssignments = audio.assignments;
 		audio.finish();
 		await store.next();
-		assert.equal(audio.assignments, failedAssignments);
+		assert.equal(audio.assignments, single);
 		assert.equal(store.getState().playing, false);
 	});
 }
