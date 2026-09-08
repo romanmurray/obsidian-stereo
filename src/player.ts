@@ -370,7 +370,8 @@ export class PlayerStore {
 		const radio = !!track.streamUrl;
 		if (automatic && repeat === "track" && !radio) return index;
 		const next = index + 1 < queue.length ? index + 1 : repeat === "queue" ? 0 : -1;
-		return radio && next === index ? -1 : next;
+		// Compare streams, not positions: a duplicate entry is the same reconnect.
+		return radio && queue[next]?.streamUrl === track.streamUrl ? -1 : next;
 	}
 
 	canNext(): boolean {

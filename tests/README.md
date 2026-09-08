@@ -17,8 +17,8 @@ handlers; unchanged previous behavior; prefetch after boundaries, removals and
 shuffle; snapshot migration; queue undo and station interaction; per-play
 scrobbling; rapid skips, stale completion events and failed playback; and radio
 handling. A radio entry that ends advances to the entry after it (wrapping under
-repeat queue), but never restarts itself through repeat track, a wrap onto the
-same stream, or an error. The suite has 40 tests, including the existing queue regressions.
+repeat queue), but never restarts itself through repeat track, a wrap or
+duplicate entry carrying the same stream URL, or an error. The suite has 40 tests, including the existing queue regressions.
 
 Live verification for issue #1 (2026-09-05, Obsidian with Navidrome):
 

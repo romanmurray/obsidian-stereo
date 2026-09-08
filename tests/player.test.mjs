@@ -447,6 +447,23 @@ for (const mode of ["off", "queue", "track"]) {
 		await store.next();
 		assert.equal(audio.assignments, single);
 		assert.equal(store.getState().playing, false);
+		// Duplicate entries of the same stream are still a reconnect, from either position.
+		for (const index of [0, 1]) {
+			await store.setQueue([radio, { ...radio }], index);
+			assert.equal(store.canNext(), false);
+			const duplicate = audio.assignments;
+			audio.finish();
+			assert.equal(audio.assignments, duplicate);
+			assert.equal(store.getState().index, index);
+			assert.equal(store.getState().playing, false);
+		}
+		// A different station is an ordinary next entry.
+		const other = { id: "radio-2", title: "Other radio", streamUrl: "https://radio.invalid/other" };
+		await store.setQueue([radio, other]);
+		const differing = audio.assignments;
+		audio.finish();
+		assert.equal(audio.assignments, differing + 1);
+		assert.equal(store.getState().track, other);
 	});
 }
 
