@@ -109,6 +109,26 @@ test("connection edits keep history and queue until committed; other settings ne
 	assert.equal(saved.settings.username, "someone-else");
 });
 
+test("reloading an uncommitted account edit drops the old queue; legacy and same-account data keep it", async (t) => {
+	const plugin = await setup(t, { settings });
+	await plugin.player.playTrack(song);
+	plugin.settings.username = "someone-else";
+	await plugin.saveSettings();
+	const midEdit = plugin.writes.at(-1);
+	assert.deepEqual(midEdit.playerState.queue, [song]);
+	const restarted = await setup(t, midEdit);
+	assert.deepEqual(restarted.player.getState().queue, []);
+	assert.equal(restarted.player.getState().track, null);
+	assert.deepEqual(restarted.player.history.getEntries(), []);
+	assert.equal(restarted.settings.username, "someone-else");
+	const playerState = { queue: [song], index: 0, position: 12, volume: 0.4 };
+	const legacy = await setup(t, { settings, playerState });
+	assert.deepEqual(legacy.player.getState().queue, [song]);
+	assert.equal(legacy.player.getState().position, 12);
+	const same = await setup(t, { settings, playerState, history: { connection: legacy.player.history.getConnection(), entries: [] } });
+	assert.deepEqual(same.player.getState().queue, [song]);
+});
+
 test("unload flushes the latest paused position and cancels delayed saves", async (t) => {
 	const plugin = await setup(t, { settings });
 	await plugin.player.playTrack(song);

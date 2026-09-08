@@ -128,11 +128,16 @@ export default class StereoPlugin extends Plugin {
 			return;
 		}
 
-		// Current shape: { settings, playerState }. Legacy shape: flat settings.
+		// Current shape: { settings, playerState, history }. Legacy shape: flat settings.
 		const settings = raw.settings ?? raw;
 		this.settings = { ...DEFAULT_SETTINGS, ...settings };
-		this.playerState = raw.playerState;
-		this.player.history.restore(raw.history, historyConnection(this.settings));
+		const connection = historyConnection(this.settings);
+		// A server URL or username saved mid-edit still carries the previous
+		// account's queue; the history snapshot names the account it belongs to.
+		// Data from before history support has no snapshot and keeps its queue.
+		const savedConnection = (raw.history as { connection?: unknown } | undefined)?.connection;
+		this.playerState = savedConnection === undefined || savedConnection === connection ? raw.playerState : undefined;
+		this.player.history.restore(raw.history, connection);
 	}
 
 	async saveSettings(): Promise<void> {

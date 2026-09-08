@@ -83,8 +83,9 @@ saved data, account separation, clear during playback, unavailable tracks,
 radio exclusion, stale history actions, favorite state on replay, and queue
 undo. The plugin persistence tests exercise legacy loading, saved queue/history
 consistency, overlapping writes followed by clearing, connection edits that are
-corrected before commit versus committed on leaving the field, and flushing on
-unload.
+corrected before commit versus committed on leaving the field, reloading while
+an account edit is uncommitted (the old queue is dropped, while legacy and
+same-account data keep theirs), and flushing on unload.
 
 Live verification for issue #3 (2026-09-07, Obsidian with Navidrome):
 
