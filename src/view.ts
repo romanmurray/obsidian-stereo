@@ -708,7 +708,7 @@ export class StereoView extends ItemView {
 			void this.plugin.player.undoQueue();
 		});
 		this.queueErrorEl = page.createDiv({ cls: "stereo-error", attr: { role: "status" } });
-		this.queueList = page.createDiv({ cls: "stereo-queue-list" });
+		this.queueList = page.createDiv({ cls: "stereo-queue-list", attr: { "aria-label": "Queue" } });
 		this.registerQueueEvents();
 	}
 
@@ -1011,14 +1011,17 @@ export class StereoView extends ItemView {
 		this.clearQueueDropMarker();
 		this.queueList.empty();
 		if (state.queue.length === 0) {
+			// The empty message is not a list item, so the list role goes with it.
+			this.queueList.removeAttribute("role");
 			this.queueList.createDiv({
 				cls: "stereo-queue-empty",
 				text: "The queue is empty.",
 			});
 			return;
 		}
+		this.queueList.setAttribute("role", "list");
 		state.queue.forEach((song, i) => {
-			const row = this.queueList.createDiv({ cls: "stereo-queue-row" });
+			const row = this.queueList.createDiv({ cls: "stereo-queue-row", attr: { role: "listitem" } });
 			row.dataset.queueIndex = String(i);
 			row.draggable = true;
 			row.tabIndex = 0;
